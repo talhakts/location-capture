@@ -65,7 +65,7 @@ test('3. Provider Registry & Adapter Capabilities', () => {
   const geograph = sourceRegistry.getGeographAdapter();
   assert.ok(geograph);
   assert.equal(geograph.capabilities.search, true);
-  assert.equal(geograph.capabilities.directDownload, false); // Rights-aware: no unauthorized downloads
+  assert.equal(geograph.capabilities.directDownload, true); // Direct download enabled for licensed project media packaging
 
   const maps = sourceRegistry.get('google_maps');
   assert.ok(maps);

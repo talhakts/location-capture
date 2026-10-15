@@ -100,6 +100,7 @@ export function ScriptToVisualsStudio({
   const [isDownloading, setIsDownloading] = useState(false);
   const [isInputModalOpen, setIsInputModalOpen] = useState(false);
   const [isExportModalOpen, setIsExportModalOpen] = useState(false);
+  const [disableCustomGraphics, setDisableCustomGraphics] = useState(true);
   const [rawPlanText, setRawPlanText] = useState('');
   const [statusMessage, setStatusMessage] = useState<string | null>(null);
   const [copiedPromptId, setCopiedPromptId] = useState<string | null>(null);
@@ -174,13 +175,16 @@ export function ScriptToVisualsStudio({
   const handleBatchSearch = async () => {
     if (!project || scenes.length === 0) return;
     setIsSearchingBatch(true);
-    setStatusMessage('Toplu görsel araması yürütülüyor (Geograph, Pexels ve Özel Grafikler)...');
+    setStatusMessage('Toplu görsel araması yürütülüyor (Geograph ve stok fotoğraf/videoları)...');
 
     try {
       const res = await fetch(`/api/projects/${project.id}/visual-plan/batch-search`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ useDemoData: !hasPexelsKey && !hasGeographKey }),
+        body: JSON.stringify({
+          useDemoData: !hasPexelsKey && !hasGeographKey,
+          generateCustomGraphics: !disableCustomGraphics,
+        }),
       });
 
       const data = await res.json();
@@ -307,6 +311,16 @@ export function ScriptToVisualsStudio({
             <FileText className="w-4 h-4 text-[#FD9E76]" />
             <span>{scenes.length > 0 ? 'Planı Düzenle / Yeniden Yapıştır' : 'Görsel Planı Yapıştır'}</span>
           </button>
+
+          <label className="flex items-center space-x-1.5 cursor-pointer text-xs font-semibold text-[#1B2A41] select-none bg-white px-2.5 py-2 rounded-lg border border-[#E2DBD0] hover:bg-[#FAF7F2] transition-colors shadow-2xs">
+            <input
+              type="checkbox"
+              checked={disableCustomGraphics}
+              onChange={(e) => setDisableCustomGraphics(e.target.checked)}
+              className="rounded text-[#FD9E76] focus:ring-0 w-3.5 h-3.5 cursor-pointer"
+            />
+            <span>Yalnızca Gerçek Stok / Fotoğraf Ara</span>
+          </label>
 
           <button
             type="button"

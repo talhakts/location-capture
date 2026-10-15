@@ -106,22 +106,45 @@ export class ProjectAssetDownloader {
 
       let fileBuffer: Buffer;
 
+      // Determine effective download URL (fallback to previewUrl if downloadUrl is omitted)
+      const downloadTargetUrl = candidate.downloadUrl || candidate.previewUrl;
+
       // Handle custom graphic (Data URI SVG)
-      if (candidate.downloadUrl?.startsWith('data:image/svg+xml;base64,')) {
-        const base64Data = candidate.downloadUrl.replace('data:image/svg+xml;base64,', '');
+      if (downloadTargetUrl?.startsWith('data:image/svg+xml;base64,')) {
+        const base64Data = downloadTargetUrl.replace('data:image/svg+xml;base64,', '');
         fileBuffer = Buffer.from(base64Data, 'base64');
-      } else if (candidate.downloadUrl?.startsWith('http://') || candidate.downloadUrl?.startsWith('https://')) {
+      } else if (downloadTargetUrl?.startsWith('http://') || downloadTargetUrl?.startsWith('https://')) {
         // Fetch from remote provider URL
         const controller = new AbortController();
         const timeout = setTimeout(() => controller.abort(), 45000); // 45s timeout for high-res video
 
-        const res = await fetch(candidate.downloadUrl, {
+        let res = await fetch(downloadTargetUrl, {
           signal: controller.signal,
           headers: {
-            'User-Agent': 'BritainOffMap-LocationCapture/1.0',
+            'User-Agent':
+              'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36 LocationCapture/1.0',
+            Accept: 'image/avif,image/webp,image/apng,image/svg+xml,image/*,video/*,*/*;q=0.8',
           },
         });
         clearTimeout(timeout);
+
+        // Fallback to previewUrl if high-res download returned 404 or 403
+        if (!res.ok && candidate.previewUrl && candidate.previewUrl !== downloadTargetUrl) {
+          try {
+            const fallbackRes = await fetch(candidate.previewUrl, {
+              headers: {
+                'User-Agent':
+                  'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36 LocationCapture/1.0',
+                Accept: 'image/*,*/*;q=0.8',
+              },
+            });
+            if (fallbackRes.ok) {
+              res = fallbackRes;
+            }
+          } catch {
+            // Ignore fallback failure and throw original error below
+          }
+        }
 
         if (!res.ok) {
           throw new Error(`Download failed with status ${res.status}: ${res.statusText}`);

@@ -38,6 +38,7 @@ export async function POST(
 
     const result = await BatchSearchCoordinator.executeBatch(targets, {
       useDemoData: Boolean(body.useDemoData),
+      generateCustomGraphics: Boolean(body.generateCustomGraphics),
       concurrency: 3,
     });
 

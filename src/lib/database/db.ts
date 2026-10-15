@@ -32,8 +32,9 @@ export function getDatabase(): DatabaseSync {
   const dbPath = getDbPath();
   const db = new DatabaseSync(dbPath);
 
-  // Enable WAL and Foreign Keys
+  // Enable WAL, Busy Timeout, and Foreign Keys
   db.exec('PRAGMA journal_mode = WAL;');
+  db.exec('PRAGMA busy_timeout = 5000;');
   db.exec('PRAGMA foreign_keys = ON;');
 
   // Initialize schema

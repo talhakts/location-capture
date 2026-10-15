@@ -193,10 +193,11 @@ export class VisualPlanParser {
       let sceneType: SceneContentType = 'stock';
       let targetMediaType: SceneTargetMediaType = 'photo';
 
-      const isGraphic =
-        /£\s*\d+|\bprice card\b|\bcustom graphic\b|\bgraphic card\b|\btext card\b|\bprice tag\b/i.test(fullContext);
+      // Only mark as graphic if explicitly specified with "custom graphic" or "graphic card" (never from price/currency mentions in voiceover)
+      const isExplicitGraphic =
+        /\b(?:type:\s*graphic|custom graphic|graphic card)\b/i.test(fullContext);
 
-      if (isGraphic) {
+      if (isExplicitGraphic) {
         sceneType = 'custom_graphic';
         targetMediaType = 'graphic';
       } else if (aiPrompt && queries.length === 0) {
@@ -210,7 +211,7 @@ export class VisualPlanParser {
         /\b(?:video|clip|footage|mp4|drone|drive-by|b-roll|panning video)\b/i.test(queries.join(' ') + ' ' + (visualNotes || '')) ||
         (motionPrompt && /handheld|pan|push-in|motion/i.test(motionPrompt));
 
-      if (isVideoPreferred && !isGraphic) {
+      if (isVideoPreferred && !isExplicitGraphic) {
         targetMediaType = 'video';
       }
 

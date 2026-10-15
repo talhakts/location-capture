@@ -16,8 +16,37 @@ import {
 
 export interface BatchSearchOptions {
   useDemoData?: boolean;
+  generateCustomGraphics?: boolean;
   concurrency?: number;
   onSceneProgress?: (sceneId: string, status: string, count: number) => void;
+}
+
+const UK_TOWN_COORDINATES: Record<string, { lat: number; lon: number }> = {
+  blackpool: { lat: 53.8175, lon: -3.0536 },
+  morecambe: { lat: 54.0745, lon: -2.8641 },
+  durham: { lat: 54.7761, lon: -1.5733 },
+  easington: { lat: 54.7865, lon: -1.3421 },
+  salcombe: { lat: 50.2384, lon: -3.7719 },
+  padstow: { lat: 50.5401, lon: -4.9394 },
+  sandbanks: { lat: 50.6865, lon: -1.9427 },
+  grimsby: { lat: 53.5675, lon: -0.0805 },
+  hull: { lat: 53.7457, lon: -0.3367 },
+  scarborough: { lat: 54.2831, lon: -0.4044 },
+  rhyl: { lat: 53.3204, lon: -3.4839 },
+  margate: { lat: 51.3850, lon: 1.3838 },
+  london: { lat: 51.5074, lon: -0.1278 },
+  manchester: { lat: 53.4808, lon: -2.2426 },
+  newcastle: { lat: 54.9783, lon: -1.6178 },
+};
+
+function resolveTownCoordinates(locationName?: string, queryText?: string): { lat: number; lon: number } {
+  const combined = `${locationName || ''} ${queryText || ''}`.toLowerCase();
+  for (const [town, coords] of Object.entries(UK_TOWN_COORDINATES)) {
+    if (combined.includes(town)) {
+      return coords;
+    }
+  }
+  return { lat: 54.0, lon: -2.0 }; // Central UK coordinates
 }
 
 export class BatchSearchCoordinator {
@@ -50,7 +79,11 @@ export class BatchSearchCoordinator {
           updateScriptScene(scene.id, { searchStatus: 'searching' });
           options.onSceneProgress?.(scene.id, 'searching', 0);
 
-          const candidates = await this.searchForScene(scene, options.useDemoData);
+          const candidates = await this.searchForScene(
+            scene,
+            options.useDemoData,
+            options.generateCustomGraphics
+          );
 
           if (candidates.length > 0) {
             saveSceneCandidates(candidates);
@@ -100,21 +133,9 @@ export class BatchSearchCoordinator {
    */
   public static async searchForScene(
     scene: ScriptScene,
-    useDemoData: boolean = false
+    useDemoData: boolean = false,
+    generateCustomGraphics: boolean = false
   ): Promise<SceneCandidateResult[]> {
-    // 1. If scene is custom graphic, generate branded SVG card directly!
-    if (scene.sceneType === 'custom_graphic') {
-      const card = GraphicGenerator.createCandidate({
-        title: scene.triggerPhrase || scene.voiceover || '£45,000',
-        subtitle: scene.visualNotes || '2 Bed Terrace • Back Garden',
-        location: scene.namedLocation || 'County Durham • Northern England',
-        notes: scene.visualNotes,
-        projectId: scene.projectId,
-        sceneId: scene.id,
-      });
-      return [card];
-    }
-
     const candidates: SceneCandidateResult[] = [];
     const seenExternalIds = new Set<string>();
 
@@ -127,14 +148,16 @@ export class BatchSearchCoordinator {
 
     // Search query alternatives in order
     for (const query of queries.slice(0, 3)) {
-      // Search Pexels
+      const coords = resolveTownCoordinates(scene.namedLocation, query);
+
+      // Search Pexels (Stock videos and photos)
       if (pexelsAdapter) {
         try {
           const pexelsResults = await pexelsAdapter.search({
             queryText: query,
             locationName: scene.namedLocation || query,
-            latitude: 54.0,
-            longitude: -1.5,
+            latitude: coords.lat,
+            longitude: coords.lon,
             perPage: 6,
             useDemoData,
           });
@@ -151,15 +174,15 @@ export class BatchSearchCoordinator {
         }
       }
 
-      // Search Geograph
+      // Search Geograph (Authentic UK geographic photography)
       if (geographAdapter) {
         try {
           const geographResults = await geographAdapter.search({
             queryText: query,
-            locationName: scene.namedLocation || 'Durham',
-            latitude: 54.7761,
-            longitude: -1.5733,
-            radiusKm: 15,
+            locationName: scene.namedLocation || 'UK',
+            latitude: coords.lat,
+            longitude: coords.lon,
+            radiusKm: 20,
             perPage: 6,
             useDemoData,
           });
@@ -180,6 +203,19 @@ export class BatchSearchCoordinator {
       if (candidates.length >= 8) {
         break;
       }
+    }
+
+    // Only if explicitly requested by user AND scene was marked as graphic, append as an alternative candidate
+    if (generateCustomGraphics && scene.sceneType === 'custom_graphic') {
+      const card = GraphicGenerator.createCandidate({
+        title: scene.triggerPhrase || scene.voiceover || 'Property Data',
+        subtitle: scene.visualNotes || 'Documentary Infographic',
+        location: scene.namedLocation || 'United Kingdom',
+        notes: scene.visualNotes,
+        projectId: scene.projectId,
+        sceneId: scene.id,
+      });
+      candidates.push(card);
     }
 
     // Rank and designate recommended result
@@ -227,7 +263,7 @@ export class BatchSearchCoordinator {
       description: item.description,
       originalUrl: item.originalUrl,
       previewUrl: item.previewUrl,
-      downloadUrl: item.downloadUrl,
+      downloadUrl: item.downloadUrl || item.previewUrl,
       creator: item.creator,
       licenceName: item.licenceName,
       licenceUrl: item.licenceUrl,
