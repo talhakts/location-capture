@@ -5,6 +5,8 @@ export async function GET() {
   try {
     const key = process.env.GEOGRAPH_API_KEY ? process.env.GEOGRAPH_API_KEY.trim() : '';
     const hasGeographKey = Boolean(key);
+    const pexelsKey = process.env.PEXELS_API_KEY ? process.env.PEXELS_API_KEY.trim() : '';
+    const hasPexelsKey = Boolean(pexelsKey);
     const stats = getDashboardStats();
     const recentLocations = listRecentLocations(8);
 
@@ -13,6 +15,7 @@ export async function GET() {
       config: {
         hasGeographKey,
         geographKey: key, // Local desktop research tool; exposes key to user's browser client for JSONP
+        hasPexelsKey,
         databaseStatus: 'connected',
         platform: process.platform,
         appName: 'Location Capture',

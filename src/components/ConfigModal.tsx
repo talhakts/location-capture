@@ -15,6 +15,7 @@ interface ConfigModalProps {
   isOpen: boolean;
   onClose: () => void;
   hasGeographKey: boolean;
+  hasPexelsKey?: boolean;
   useDemoData: boolean;
   onToggleDemoData: () => void;
 }
@@ -23,6 +24,7 @@ export function ConfigModal({
   isOpen,
   onClose,
   hasGeographKey,
+  hasPexelsKey = false,
   useDemoData,
   onToggleDemoData,
 }: ConfigModalProps) {
@@ -44,8 +46,8 @@ export function ConfigModal({
           </button>
         </div>
 
-        <div className="p-6 space-y-5 text-xs text-[#1B2A41]">
-          {/* Durum Bildirimi */}
+        <div className="p-6 space-y-5 text-xs text-[#1B2A41] max-h-[80vh] overflow-y-auto">
+          {/* Geograph Durum Bildirimi */}
           <div
             className={`p-4 rounded-lg border flex items-start space-x-3 ${
               hasGeographKey
@@ -66,8 +68,35 @@ export function ConfigModal({
               </h4>
               <p className="mt-1 leading-relaxed">
                 {hasGeographKey
-                  ? 'Sunucu ortamınızda GEOGRAPH_API_KEY başarıyla algılandı. Arama yaparken Cloudflare bot engeline takılmamak için tarayıcınız doğrudan Geograph akışına bağlanır.'
+                  ? 'Sunucu ortamınızda GEOGRAPH_API_KEY başarıyla algılandı. Birleşik Krallık coğrafi fotoğrafları canlı sorgulanır.'
                   : 'Canlı fotoğraf keşfi için ücretsiz Geograph anahtarınızı .env.local dosyasına ekleyebilirsiniz.'}
+              </p>
+            </div>
+          </div>
+
+          {/* Pexels Durum Bildirimi */}
+          <div
+            className={`p-4 rounded-lg border flex items-start space-x-3 ${
+              hasPexelsKey
+                ? 'bg-emerald-50 border-emerald-200 text-emerald-800'
+                : 'bg-slate-50 border-slate-200 text-slate-800'
+            }`}
+          >
+            {hasPexelsKey ? (
+              <CheckCircle2 className="w-5 h-5 text-emerald-600 mt-0.5 shrink-0" />
+            ) : (
+              <Sparkles className="w-5 h-5 text-[#FD9E76] mt-0.5 shrink-0" />
+            )}
+            <div>
+              <h4 className="font-bold text-sm">
+                {hasPexelsKey
+                  ? 'Pexels API Anahtarı Tanımlandı (Stok Foto & Video Aktif)'
+                  : 'Pexels API Anahtarı (İsteğe Bağlı)'}
+              </h4>
+              <p className="mt-1 leading-relaxed">
+                {hasPexelsKey
+                  ? 'PEXELS_API_KEY sunucu tarafında algılandı. Sahneler için yüksek çözünürlüklü stok fotoğraf ve video aramaları canlı çalışır.'
+                  : 'Batch Studio içinde canlı stok fotoğraf ve HD video aramak için pexels.com/api üzerinden ücretsiz API anahtarı alıp .env.local dosyasına ekleyebilirsiniz.'}
               </p>
             </div>
           </div>
@@ -75,30 +104,12 @@ export function ConfigModal({
           {/* Kurulum Rehberi */}
           <div className="space-y-3">
             <h4 className="font-bold text-sm uppercase tracking-wider text-[#1B2A41]">
-              Anahtar Nasıl Yapılandırılır?
+              .env.local Dosya Örneği
             </h4>
-            <ol className="list-decimal pl-5 space-y-2 text-[#71717A] leading-relaxed">
-              <li>
-                Geograph resmi kayıt sayfasından ücretsiz anahtar alın:{' '}
-                <a
-                  href="https://www.geograph.org.uk/get-api-key.php"
-                  target="_blank"
-                  rel="noreferrer"
-                  className="text-[#1B2A41] font-semibold underline inline-flex items-center"
-                >
-                  geograph.org.uk/get-api-key.php <ExternalLink className="w-3 h-3 ml-1" />
-                </a>
-              </li>
-              <li>
-                Dosyanız:{' '}
-                <code className="bg-[#FAF7F2] px-1.5 py-0.5 rounded border border-[#E2DBD0] text-[#1B2A41] font-mono">
-                  location-capture/.env.local
-                </code>
-                <pre className="bg-[#1B2A41] text-[#FD9E76] p-2.5 rounded mt-1 font-mono text-[11px] select-all">
-                  GEOGRAPH_API_KEY=50d6956376
-                </pre>
-              </li>
-            </ol>
+            <pre className="bg-[#1B2A41] text-[#FD9E76] p-3 rounded font-mono text-[11px] select-all leading-relaxed">
+GEOGRAPH_API_KEY=50d6956376
+PEXELS_API_KEY=your_pexels_key_here
+            </pre>
           </div>
 
           {/* Demo Modu Butonu */}

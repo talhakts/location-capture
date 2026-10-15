@@ -23,8 +23,8 @@ interface HeaderProps {
   hasGeographKey: boolean;
   useDemoData: boolean;
   onToggleDemoData: () => void;
-  activeTab: 'search' | 'project' | 'shots' | 'media';
-  onChangeTab: (tab: 'search' | 'project' | 'shots' | 'media') => void;
+  activeTab: 'search' | 'batch' | 'project' | 'shots' | 'media';
+  onChangeTab: (tab: 'search' | 'batch' | 'project' | 'shots' | 'media') => void;
   savedCount: number;
   shotCount: number;
 }
@@ -150,7 +150,18 @@ export function Header({
                 : 'border-transparent text-[#E2DBD0]/70 hover:text-white'
             }`}
           >
-            Konum Arama &amp; Görsel Keşif
+            Konum Arama &amp; Keşif
+          </button>
+          <button
+            onClick={() => onChangeTab('batch')}
+            className={`px-4 py-2 text-xs font-semibold uppercase tracking-wider transition-colors border-b-2 flex items-center space-x-1.5 whitespace-nowrap ${
+              activeTab === 'batch'
+                ? 'border-[#FD9E76] text-[#FD9E76] bg-[#243856]/40'
+                : 'border-transparent text-[#E2DBD0]/70 hover:text-white'
+            }`}
+          >
+            <Sparkles className="w-3.5 h-3.5 text-[#FD9E76]" />
+            <span>Senaryo → Görseller</span>
           </button>
           <button
             onClick={() => onChangeTab('project')}

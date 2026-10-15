@@ -144,3 +144,110 @@ export interface SearchFilterParams {
   source?: 'geograph' | 'all';
   useDemoData?: boolean;
 }
+
+// ==========================================
+// Script-to-Visuals Batch Studio Definitions
+// ==========================================
+
+export type SceneTargetMediaType = 'photo' | 'video' | 'graphic' | 'mixed';
+export type SceneContentType = 'stock' | 'custom_graphic' | 'ai_prompt' | 'mixed';
+export type SceneSearchStatus = 'pending' | 'searching' | 'completed' | 'failed' | 'needs_manual';
+export type SceneDownloadStatus = 'none' | 'queued' | 'downloading' | 'completed' | 'failed' | 'manual_required';
+
+export type CandidateMatchType =
+  | 'exact_location'
+  | 'nearby_reference'
+  | 'generic_visual'
+  | 'custom_graphic'
+  | 'historic_reconstruction';
+
+export interface VisualPlan {
+  id: string;
+  projectId: string;
+  title?: string;
+  rawInput: string;
+  sceneCount: number;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface ScriptScene {
+  id: string;
+  projectId: string;
+  visualPlanId: string;
+  sceneNumber: number;
+  timecode: string; // e.g. "0:00", "0:03"
+  triggerPhrase?: string; // e.g. "Here's", "back garden"
+  voiceover?: string;
+  searchQueries: string[]; // Ordered alternative queries
+  visualNotes?: string;
+  aiPrompt?: string;
+  motionPrompt?: string;
+  targetMediaType: SceneTargetMediaType;
+  targetDurationSeconds: number; // e.g. 6 or 8
+  namedLocation?: string;
+  sceneType: SceneContentType;
+  unparsedContent?: string;
+  searchStatus: SceneSearchStatus;
+  selectedCandidateId?: string;
+  selectedAssetSnapshot?: SceneCandidateResult;
+  downloadStatus: SceneDownloadStatus;
+  downloadedFilePath?: string;
+  downloadedFilename?: string;
+  downloadError?: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface SceneCandidateResult {
+  id: string;
+  sceneId: string;
+  projectId: string;
+  providerId: 'geograph' | 'pexels' | 'custom_graphic' | 'stock_video';
+  externalAssetId: string;
+  queryUsed: string;
+  title: string;
+  description?: string;
+  originalUrl: string;
+  previewUrl: string;
+  downloadUrl?: string;
+  creator: string;
+  licenceName: string;
+  licenceUrl?: string;
+  commercialUseStatus: CommercialUseStatus;
+  mediaType: MediaType;
+  width?: number;
+  height?: number;
+  durationSeconds?: number;
+  relevanceScore: number;
+  matchType: CandidateMatchType;
+  isRecommended: boolean;
+  geographicMatchNotes?: string;
+  discoveredAt: string;
+}
+
+export interface BatchSearchProgress {
+  totalScenes: number;
+  completedScenes: number;
+  searchingScenes: number;
+  failedScenes: number;
+  isFinished: boolean;
+  activeSceneNumber?: number;
+  errorMessage?: string;
+}
+
+export interface BatchAssetMapRow {
+  sceneNumber: number;
+  timecode: string;
+  triggerPhrase: string;
+  voiceover: string;
+  localFilename: string;
+  mediaType: string;
+  provider: string;
+  originalUrl: string;
+  creator: string;
+  licence: string;
+  downloadStatus: string;
+  geographicMatchStatus: string;
+}
+

@@ -14,12 +14,13 @@ export interface SourceCapabilities {
 
 export interface SearchResultItem {
   id: string;
-  providerId: 'geograph' | 'google_maps' | 'google_earth' | 'stock_video' | 'manual_upload';
+  providerId: 'geograph' | 'pexels' | 'google_maps' | 'google_earth' | 'stock_video' | 'manual_upload' | 'custom_graphic';
   externalAssetId: string;
   title: string;
   description: string;
   originalUrl: string;
   previewUrl?: string;
+  downloadUrl?: string;
   creator: string;
   licenceName: string;
   licenceUrl: string;

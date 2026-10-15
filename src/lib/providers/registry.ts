@@ -1,5 +1,6 @@
 import { SourceAdapter } from './types';
 import { GeographAdapter } from './geograph-adapter';
+import { PexelsAdapter } from './pexels-adapter';
 import { GoogleMapsAdapter } from './google-maps-adapter';
 import { GoogleEarthStudioAdapter } from './google-earth-adapter';
 import { StockVideoAdapter } from './stock-video-adapter';
@@ -9,6 +10,7 @@ class SourceRegistry {
 
   constructor() {
     this.register(new GeographAdapter());
+    this.register(new PexelsAdapter());
     this.register(new GoogleMapsAdapter());
     this.register(new GoogleEarthStudioAdapter());
     this.register(new StockVideoAdapter());
@@ -29,6 +31,11 @@ class SourceRegistry {
   public getGeographAdapter(): GeographAdapter {
     return this.adapters.get('geograph') as GeographAdapter;
   }
+
+  public getPexelsAdapter(): PexelsAdapter {
+    return this.adapters.get('pexels') as PexelsAdapter;
+  }
 }
 
 export const sourceRegistry = new SourceRegistry();
+

@@ -13,17 +13,19 @@ import { MediaImporter } from '@/components/MediaImporter';
 import { NewProjectModal } from '@/components/NewProjectModal';
 import { ExportModal } from '@/components/ExportModal';
 import { ConfigModal } from '@/components/ConfigModal';
+import { ScriptToVisualsStudio } from '@/components/ScriptToVisualsStudio';
 import { fetchGeographClientJsonp } from '@/lib/location/geograph-client';
 
 export default function Home() {
   // Navigation & Modal states
-  const [activeTab, setActiveTab] = useState<'search' | 'project' | 'shots' | 'media'>('search');
+  const [activeTab, setActiveTab] = useState<'search' | 'batch' | 'project' | 'shots' | 'media'>('search');
   const [isNewProjectModalOpen, setIsNewProjectModalOpen] = useState(false);
   const [isConfigModalOpen, setIsConfigModalOpen] = useState(false);
   const [isExportModalOpen, setIsExportModalOpen] = useState(false);
 
   // Configuration & System Stats
   const [hasGeographKey, setHasGeographKey] = useState(false);
+  const [hasPexelsKey, setHasPexelsKey] = useState(false);
   const [geographApiKey, setGeographApiKey] = useState('');
   const [useDemoData, setUseDemoData] = useState(false); // Default to live now that key is configured!
   const [stats, setStats] = useState({
@@ -58,6 +60,7 @@ export default function Home() {
       const data = await res.json();
       if (data.success) {
         setHasGeographKey(data.config.hasGeographKey);
+        setHasPexelsKey(Boolean(data.config.hasPexelsKey));
         setGeographApiKey(data.config.geographKey || '');
         setStats(data.stats);
         setRecentLocations(data.recentLocations || []);
@@ -141,7 +144,7 @@ export default function Home() {
 
     // If in live mode and we have an API key, call Geograph directly from the browser (JSONP)
     // to bypass server-side Cloudflare bot blocking
-    const activeKey = geographApiKey || '50d6956376';
+    const activeKey = geographApiKey;
     if (!useDemoData && activeKey) {
       try {
         const livePhotos = await fetchGeographClientJsonp(
@@ -477,7 +480,16 @@ export default function Home() {
           </div>
         )}
 
-        {/* Tab 2: Project Collection Workspace */}
+        {/* Tab 2: Script to Visuals Batch Studio */}
+        {activeTab === 'batch' && (
+          <ScriptToVisualsStudio
+            project={activeProject}
+            hasGeographKey={hasGeographKey}
+            hasPexelsKey={hasPexelsKey}
+          />
+        )}
+
+        {/* Tab 3: Project Collection Workspace */}
         {activeTab === 'project' && activeProject && (
           <ProjectWorkspace
             project={activeProject}
@@ -554,6 +566,7 @@ export default function Home() {
         isOpen={isConfigModalOpen}
         onClose={() => setIsConfigModalOpen(false)}
         hasGeographKey={hasGeographKey}
+        hasPexelsKey={hasPexelsKey}
         useDemoData={useDemoData}
         onToggleDemoData={() => setUseDemoData(!useDemoData)}
       />

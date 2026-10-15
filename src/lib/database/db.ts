@@ -7,7 +7,11 @@ import {
   SourceReference,
   ShotPlan,
   LocalMedia,
-  WorkflowStatus
+  WorkflowStatus,
+  VisualPlan,
+  ScriptScene,
+  SceneCandidateResult,
+  SceneDownloadStatus
 } from '../types';
 
 let dbInstance: DatabaseSync | null = null;
@@ -122,6 +126,77 @@ export function getDatabase(): DatabaseSync {
       notes TEXT,
       FOREIGN KEY (projectId) REFERENCES projects(id) ON DELETE CASCADE,
       FOREIGN KEY (sourceReferenceId) REFERENCES source_references(id) ON DELETE SET NULL
+    );
+
+    CREATE TABLE IF NOT EXISTS visual_plans (
+      id TEXT PRIMARY KEY,
+      projectId TEXT NOT NULL,
+      title TEXT,
+      rawInput TEXT NOT NULL,
+      sceneCount INTEGER NOT NULL,
+      createdAt TEXT NOT NULL,
+      updatedAt TEXT NOT NULL,
+      FOREIGN KEY (projectId) REFERENCES projects(id) ON DELETE CASCADE
+    );
+
+    CREATE TABLE IF NOT EXISTS script_scenes (
+      id TEXT PRIMARY KEY,
+      projectId TEXT NOT NULL,
+      visualPlanId TEXT NOT NULL,
+      sceneNumber INTEGER NOT NULL,
+      timecode TEXT NOT NULL,
+      triggerPhrase TEXT,
+      voiceover TEXT,
+      searchQueries TEXT NOT NULL,
+      visualNotes TEXT,
+      aiPrompt TEXT,
+      motionPrompt TEXT,
+      targetMediaType TEXT NOT NULL,
+      targetDurationSeconds INTEGER NOT NULL,
+      namedLocation TEXT,
+      sceneType TEXT NOT NULL,
+      unparsedContent TEXT,
+      searchStatus TEXT NOT NULL DEFAULT 'pending',
+      selectedCandidateId TEXT,
+      selectedAssetSnapshot TEXT,
+      downloadStatus TEXT NOT NULL DEFAULT 'none',
+      downloadedFilePath TEXT,
+      downloadedFilename TEXT,
+      downloadError TEXT,
+      createdAt TEXT NOT NULL,
+      updatedAt TEXT NOT NULL,
+      FOREIGN KEY (projectId) REFERENCES projects(id) ON DELETE CASCADE,
+      FOREIGN KEY (visualPlanId) REFERENCES visual_plans(id) ON DELETE CASCADE
+    );
+
+    CREATE TABLE IF NOT EXISTS scene_candidates (
+      id TEXT PRIMARY KEY,
+      sceneId TEXT NOT NULL,
+      projectId TEXT NOT NULL,
+      providerId TEXT NOT NULL,
+      externalAssetId TEXT NOT NULL,
+      queryUsed TEXT NOT NULL,
+      title TEXT NOT NULL,
+      description TEXT,
+      originalUrl TEXT NOT NULL,
+      previewUrl TEXT NOT NULL,
+      downloadUrl TEXT,
+      creator TEXT NOT NULL,
+      licenceName TEXT NOT NULL,
+      licenceUrl TEXT,
+      commercialUseStatus TEXT NOT NULL,
+      mediaType TEXT NOT NULL,
+      width INTEGER,
+      height INTEGER,
+      durationSeconds REAL,
+      relevanceScore REAL NOT NULL,
+      matchType TEXT NOT NULL,
+      isRecommended INTEGER NOT NULL DEFAULT 0,
+      geographicMatchNotes TEXT,
+      discoveredAt TEXT NOT NULL,
+      FOREIGN KEY (projectId) REFERENCES projects(id) ON DELETE CASCADE,
+      FOREIGN KEY (sceneId) REFERENCES script_scenes(id) ON DELETE CASCADE,
+      UNIQUE(sceneId, providerId, externalAssetId)
     );
   `);
 
@@ -532,3 +607,263 @@ export function getDashboardStats(): DashboardStats {
     totalShotPlans: shotCount,
   };
 }
+
+// ---------------- VISUAL PLANS & SCRIPT SCENES ----------------
+
+export function createOrUpdateVisualPlan(plan: VisualPlan): VisualPlan {
+  const db = getDatabase();
+  const existing = db.prepare('SELECT id FROM visual_plans WHERE id = ?').get(plan.id) as { id: string } | undefined;
+
+  if (existing) {
+    db.prepare(`
+      UPDATE visual_plans
+      SET title = ?, rawInput = ?, sceneCount = ?, updatedAt = ?
+      WHERE id = ?
+    `).run(
+      plan.title || null,
+      plan.rawInput,
+      plan.sceneCount,
+      plan.updatedAt,
+      plan.id
+    );
+  } else {
+    db.prepare(`
+      INSERT INTO visual_plans (id, projectId, title, rawInput, sceneCount, createdAt, updatedAt)
+      VALUES (?, ?, ?, ?, ?, ?, ?)
+    `).run(
+      plan.id,
+      plan.projectId,
+      plan.title || null,
+      plan.rawInput,
+      plan.sceneCount,
+      plan.createdAt,
+      plan.updatedAt
+    );
+  }
+  return plan;
+}
+
+export function getVisualPlan(id: string): VisualPlan | null {
+  const db = getDatabase();
+  const row = db.prepare('SELECT * FROM visual_plans WHERE id = ?').get(id) as VisualPlan | undefined;
+  return row || null;
+}
+
+export function getVisualPlanByProject(projectId: string): VisualPlan | null {
+  const db = getDatabase();
+  const row = db.prepare('SELECT * FROM visual_plans WHERE projectId = ? ORDER BY updatedAt DESC LIMIT 1').get(projectId) as VisualPlan | undefined;
+  return row || null;
+}
+
+export function saveScriptScenes(scenes: ScriptScene[]): void {
+  const db = getDatabase();
+  const insertStmt = db.prepare(`
+    INSERT OR REPLACE INTO script_scenes (
+      id, projectId, visualPlanId, sceneNumber, timecode, triggerPhrase, voiceover,
+      searchQueries, visualNotes, aiPrompt, motionPrompt, targetMediaType,
+      targetDurationSeconds, namedLocation, sceneType, unparsedContent,
+      searchStatus, selectedCandidateId, selectedAssetSnapshot, downloadStatus,
+      downloadedFilePath, downloadedFilename, downloadError, createdAt, updatedAt
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+  `);
+
+  for (const s of scenes) {
+    insertStmt.run(
+      s.id,
+      s.projectId,
+      s.visualPlanId,
+      s.sceneNumber,
+      s.timecode,
+      s.triggerPhrase || null,
+      s.voiceover || null,
+      JSON.stringify(s.searchQueries || []),
+      s.visualNotes || null,
+      s.aiPrompt || null,
+      s.motionPrompt || null,
+      s.targetMediaType,
+      s.targetDurationSeconds,
+      s.namedLocation || null,
+      s.sceneType,
+      s.unparsedContent || null,
+      s.searchStatus || 'pending',
+      s.selectedCandidateId || null,
+      s.selectedAssetSnapshot ? JSON.stringify(s.selectedAssetSnapshot) : null,
+      s.downloadStatus || 'none',
+      s.downloadedFilePath || null,
+      s.downloadedFilename || null,
+      s.downloadError || null,
+      s.createdAt,
+      s.updatedAt
+    );
+  }
+}
+
+function mapScriptSceneRow(row: any): ScriptScene {
+  return {
+    ...row,
+    searchQueries: typeof row.searchQueries === 'string' ? JSON.parse(row.searchQueries) : row.searchQueries || [],
+    selectedAssetSnapshot: row.selectedAssetSnapshot ? JSON.parse(row.selectedAssetSnapshot) : undefined,
+  };
+}
+
+export function listScriptScenesByPlan(visualPlanId: string): ScriptScene[] {
+  const db = getDatabase();
+  const rows = db.prepare('SELECT * FROM script_scenes WHERE visualPlanId = ? ORDER BY sceneNumber ASC').all(visualPlanId) as any[];
+  return rows.map(mapScriptSceneRow);
+}
+
+export function listScriptScenesByProject(projectId: string): ScriptScene[] {
+  const db = getDatabase();
+  const rows = db.prepare('SELECT * FROM script_scenes WHERE projectId = ? ORDER BY sceneNumber ASC').all(projectId) as any[];
+  return rows.map(mapScriptSceneRow);
+}
+
+export function getScriptScene(id: string): ScriptScene | null {
+  const db = getDatabase();
+  const row = db.prepare('SELECT * FROM script_scenes WHERE id = ?').get(id) as any;
+  return row ? mapScriptSceneRow(row) : null;
+}
+
+export function updateScriptScene(id: string, updates: Partial<ScriptScene>): ScriptScene | null {
+  const existing = getScriptScene(id);
+  if (!existing) return null;
+
+  const merged: ScriptScene = {
+    ...existing,
+    ...updates,
+    updatedAt: new Date().toISOString(),
+  };
+
+  const db = getDatabase();
+  db.prepare(`
+    UPDATE script_scenes
+    SET sceneNumber = ?, timecode = ?, triggerPhrase = ?, voiceover = ?,
+        searchQueries = ?, visualNotes = ?, aiPrompt = ?, motionPrompt = ?,
+        targetMediaType = ?, targetDurationSeconds = ?, namedLocation = ?,
+        sceneType = ?, unparsedContent = ?, searchStatus = ?, selectedCandidateId = ?,
+        selectedAssetSnapshot = ?, downloadStatus = ?, downloadedFilePath = ?,
+        downloadedFilename = ?, downloadError = ?, updatedAt = ?
+    WHERE id = ?
+  `).run(
+    merged.sceneNumber,
+    merged.timecode,
+    merged.triggerPhrase || null,
+    merged.voiceover || null,
+    JSON.stringify(merged.searchQueries || []),
+    merged.visualNotes || null,
+    merged.aiPrompt || null,
+    merged.motionPrompt || null,
+    merged.targetMediaType,
+    merged.targetDurationSeconds,
+    merged.namedLocation || null,
+    merged.sceneType,
+    merged.unparsedContent || null,
+    merged.searchStatus,
+    merged.selectedCandidateId || null,
+    merged.selectedAssetSnapshot ? JSON.stringify(merged.selectedAssetSnapshot) : null,
+    merged.downloadStatus,
+    merged.downloadedFilePath || null,
+    merged.downloadedFilename || null,
+    merged.downloadError || null,
+    merged.updatedAt,
+    id
+  );
+
+  return merged;
+}
+
+export function saveSceneCandidates(candidates: SceneCandidateResult[]): void {
+  const db = getDatabase();
+  const insertStmt = db.prepare(`
+    INSERT OR REPLACE INTO scene_candidates (
+      id, sceneId, projectId, providerId, externalAssetId, queryUsed,
+      title, description, originalUrl, previewUrl, downloadUrl, creator,
+      licenceName, licenceUrl, commercialUseStatus, mediaType, width, height,
+      durationSeconds, relevanceScore, matchType, isRecommended,
+      geographicMatchNotes, discoveredAt
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+  `);
+
+  for (const c of candidates) {
+    insertStmt.run(
+      c.id,
+      c.sceneId,
+      c.projectId,
+      c.providerId,
+      c.externalAssetId,
+      c.queryUsed,
+      c.title,
+      c.description || null,
+      c.originalUrl,
+      c.previewUrl,
+      c.downloadUrl || null,
+      c.creator,
+      c.licenceName,
+      c.licenceUrl || null,
+      c.commercialUseStatus,
+      c.mediaType,
+      c.width || null,
+      c.height || null,
+      c.durationSeconds || null,
+      c.relevanceScore,
+      c.matchType,
+      c.isRecommended ? 1 : 0,
+      c.geographicMatchNotes || null,
+      c.discoveredAt
+    );
+  }
+}
+
+function mapCandidateRow(row: any): SceneCandidateResult {
+  return {
+    ...row,
+    isRecommended: Boolean(row.isRecommended),
+  };
+}
+
+export function listSceneCandidates(sceneId: string): SceneCandidateResult[] {
+  const db = getDatabase();
+  const rows = db.prepare('SELECT * FROM scene_candidates WHERE sceneId = ? ORDER BY isRecommended DESC, relevanceScore DESC').all(sceneId) as any[];
+  return rows.map(mapCandidateRow);
+}
+
+export function listSceneCandidatesByProject(projectId: string): SceneCandidateResult[] {
+  const db = getDatabase();
+  const rows = db.prepare('SELECT * FROM scene_candidates WHERE projectId = ? ORDER BY sceneId, isRecommended DESC, relevanceScore DESC').all(projectId) as any[];
+  return rows.map(mapCandidateRow);
+}
+
+export function selectSceneCandidate(sceneId: string, candidate: SceneCandidateResult | null): void {
+  const db = getDatabase();
+  if (candidate) {
+    db.prepare(`
+      UPDATE script_scenes
+      SET selectedCandidateId = ?, selectedAssetSnapshot = ?, updatedAt = ?
+      WHERE id = ?
+    `).run(candidate.id, JSON.stringify(candidate), new Date().toISOString(), sceneId);
+  } else {
+    db.prepare(`
+      UPDATE script_scenes
+      SET selectedCandidateId = NULL, selectedAssetSnapshot = NULL, updatedAt = ?
+      WHERE id = ?
+    `).run(new Date().toISOString(), sceneId);
+  }
+}
+
+export function updateSceneDownloadStatus(
+  sceneId: string,
+  status: SceneDownloadStatus,
+  filename?: string,
+  filePath?: string,
+  error?: string
+): void {
+  const db = getDatabase();
+  db.prepare(`
+    UPDATE script_scenes
+    SET downloadStatus = ?, downloadedFilename = COALESCE(?, downloadedFilename),
+        downloadedFilePath = COALESCE(?, downloadedFilePath), downloadError = ?,
+        updatedAt = ?
+    WHERE id = ?
+  `).run(status, filename || null, filePath || null, error || null, new Date().toISOString(), sceneId);
+}
+

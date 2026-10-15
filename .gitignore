@@ -37,6 +37,8 @@ yarn-error.log*
 # sqlite database & local uploads
 /data/*.db*
 /data/uploads/*
+Britain-Off-Map-Projects/
+public/projects/
 
 # vercel
 .vercel

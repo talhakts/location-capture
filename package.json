@@ -7,7 +7,7 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
-    "test": "tsx --test tests/location-capture.test.ts"
+    "test": "tsx --test tests/*.test.ts"
   },
   "dependencies": {
     "lucide-react": "^1.57.0",
