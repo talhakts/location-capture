@@ -32,61 +32,35 @@ interface ScriptToVisualsStudioProps {
   hasPexelsKey?: boolean;
 }
 
-const SAMPLE_NINE_SCENE_PLAN = `1 | 0:00 | trigger: "Here's"
-Voiceover: "Here's a two-bedroom terrace in County Durham with a back garden..."
-Stock: Northern England terraced houses → British terraced houses street → UK red brick terrace row
-Notes: Exterior, understated, grey sky. Keep the visual world consistent with the documentary thumbnail.
-AI prompt: Photorealistic exterior of a two-storey Northern English red-brick terraced house in County Durham, front door and two windows, small front yard wall, overcast natural daylight, muted colours, eye-level 35mm documentary look, no people, no text.
-Motion: Very slow push-in toward the front door, slight handheld drift, 6 seconds.
+const SAMPLE_NINE_SCENE_PLAN = `1 | 0:00 | trigger: “On Grosvenor Street”
+Stock: Blackpool terraced house street → Blackpool guest house terrace → British Victorian terraced street
+Notes: Wide street shot of a tall Victorian guest-house terrace, overcast sky. Stock only, no graphic.
+AI prompt: None
+Motion: Zoom in 100% → 109% from the first frame, linear ease, 5 seconds.
 
-2 | 0:03 | trigger: "back garden"
-Voiceover: "A tidy rear yard that could easily be transformed."
-Stock: terraced house back garden UK → British back yard washing line → English rear garden terrace
-Notes: Small but tidy rear garden, brick boundary walls.
-Motion: Gentle pan across rear fence, 6 seconds.
+2 | 0:05 | trigger: “guide price of £35,000”
+Stock: None
+Notes: Price card graphic that appears on the word “£35,000”. Pastel-orange price on deep navy, location tag in cream.
+AI prompt: Clean editorial price-card graphic, deep navy panel with large pastel-orange “£35,000”, small cream text “AUCTION GUIDE PRICE · GROSVENOR STREET, BLACKPOOL”, flat modern documentary design, no clutter, transparent background for overlay.
+Motion: Zoom out 109% → 100% from the first frame, linear ease, 3 seconds.
 
-3 | 0:06 | trigger: "primary school"
-Voiceover: "Just around the corner sits the local primary school..."
-Stock: UK primary school exterior → British school gates → English primary school playground
-Notes: Keep readable signs and logos out of frame where possible.
-Motion: Static establishing shot, natural morning light, 8 seconds.
+3 | 0:08 | trigger: “That is less than many people spend”
+Stock: None
+Notes: Simple comparison bar graphic. “£35,000 house” is shorter than “New family car”. The car bar fills in on the words “new family car”.
+AI prompt: Minimal two-bar comparison infographic, deep navy background, pastel-orange bar labelled “Terraced house £35,000” beside a slightly longer cream bar labelled “New family car”, clean sans-serif typography, documentary editorial style, transparent background.
+Motion: Zoom in 100% → 108% from the first frame, linear ease, 5 seconds.
 
-4 | 0:10 | trigger: "fish and chips"
-Voiceover: "The village fish and chip shop remains the social hub of the high street."
-Stock: British fish and chip shop exterior → Northern England local chippy → UK traditional takeaway storefront
-Notes: Real community feel, brick pavement, warm interior lights glowing.
-Motion: Slow right-to-left tracking pass, 6 seconds.
+4 | 0:13 | trigger: “A few streets away”
+Stock: Blackpool back street terraced houses → Geograph Blackpool General Street → British terraced houses
+Notes: Quiet back street with ordinary terraced houses. Stock only, no graphic.
+AI prompt: None
+Motion: Zoom out 110% → 100% from the first frame, linear ease, 3 seconds.
 
-5 | 0:14 | trigger: "1970s heyday"
-Voiceover: "In the 1970s, miners would line up here every Friday evening."
-Stock: 1970s British mining village street → historic Northern England pit town archive → vintage UK terraced street 1970s
-Notes: Historic reconstruction or archival tone. Sepia or muted vintage grain.
-AI prompt: 1970s vintage photograph of a bustling Northern England coal mining village high street, vintage British cars parked, miners walking in flat caps, muted Kodachrome film grain look, 1974.
-Motion: Slow digital push-in on still photograph, 6 seconds.
-
-6 | 0:18 | trigger: "£45,000"
-Voiceover: "And the asking price on the open market? Just forty-five thousand pounds."
-Stock: price card £45,000 → custom graphic property card
-Notes: Custom graphic card: "£45,000" with cream background, navy border, and description "2 bed terrace • back garden".
-Motion: Center pop-in with subtle 102% float, 6 seconds.
-
-7 | 0:22 | trigger: "for sale"
-Voiceover: "Houses like this attract property investors from across the South East."
-Stock: UK for sale board outside terraced house → estate agent board British street → house sold sign UK
-Notes: Estate agent board in foreground, terraced street receding into distance.
-Motion: Depth-of-field rack focus from for-sale sign to street, 6 seconds.
-
-8 | 0:26 | trigger: "tidy street"
-Voiceover: "A peaceful row of homes with panoramic coastal views just over the crest."
-Stock: neat British terraced street → quiet Northern England village road → clean red brick terraces
-Notes: Long view down street, chimneys silhouetted against overcast coastal sky.
-Motion: Slow forward gimbal walk, 8 seconds.
-
-9 | 0:32 | trigger: "North Sea coast"
-Voiceover: "Walking past the final terrace reveals the untamed expanse of the Durham heritage coast."
-Stock: Easington Colliery coastal path → Durham heritage coast cliffs → North Sea crashing on northern British beach
-Notes: Dramatic coastal horizon, grassland meeting grey North Sea, authentic British weather.
-Motion: Wide aerial drone pull-back revealing coastline, 8 seconds.`;
+5 | 0:16 | trigger: “three-bedroom houses are listed for £40,000”
+Stock: None
+Notes: Two-line price card. The first row appears on “£40,000” and the second on “£25,000” (the General Street flat).
+AI prompt: Two-row price card graphic, deep navy panel, pastel-orange prices “£40,000” and “£25,000” with cream labels “3-BED HOUSE” and “1-BED FLAT · GENERAL STREET”, modern editorial design, transparent background.
+Motion: Zoom in 100% → 109% from the first frame, linear ease, 5 seconds.`;
 
 export function ScriptToVisualsStudio({
   project,

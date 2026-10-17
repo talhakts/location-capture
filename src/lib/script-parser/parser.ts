@@ -45,12 +45,21 @@ export function extractDurationFromText(text: string): number | null {
  */
 export function extractSearchQueries(rawStock: string): string[] {
   if (!rawStock) return [];
+  const trimmedRaw = rawStock.trim();
+  if (['none', 'n/a', 'yok', 'no', 'null', 'undefined', '-', ''].includes(trimmedRaw.toLowerCase())) {
+    return [];
+  }
   // Split on arrow markers or pipes or semicolons
   const parts = rawStock.split(/→|->|\||;/g);
   const queries: string[] = [];
   for (const p of parts) {
-    const trimmed = p.trim().replace(/^["']|["']$/g, '');
-    if (trimmed.length > 1 && !queries.includes(trimmed)) {
+    const trimmed = p.trim().replace(/^["“”'«»]|["“”'«»]$/g, '');
+    const pLower = trimmed.toLowerCase();
+    if (
+      trimmed.length > 1 &&
+      !['none', 'n/a', 'yok', 'no', 'null', 'undefined', '-'].includes(pLower) &&
+      !queries.includes(trimmed)
+    ) {
       queries.push(trimmed);
     }
   }
