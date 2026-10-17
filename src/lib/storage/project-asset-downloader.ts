@@ -1,5 +1,6 @@
 import fs from 'node:fs';
 import path from 'node:path';
+import sharp from 'sharp';
 import { Project, ScriptScene, SceneCandidateResult } from '../types';
 import { updateSceneDownloadStatus, addLocalMedia } from '../database/db';
 
@@ -106,52 +107,64 @@ export class ProjectAssetDownloader {
 
       let fileBuffer: Buffer;
 
-      // Determine effective download URL (fallback to previewUrl if downloadUrl is omitted)
-      const downloadTargetUrl = candidate.downloadUrl || candidate.previewUrl;
+      // Determine effective download URL candidates in quality order
+      const urlsToAttempt: string[] = [];
+      const primaryUrl = candidate.downloadUrl || candidate.previewUrl;
+
+      if (primaryUrl) {
+        // If Geograph URL, test high-res variants first
+        if (primaryUrl.includes('geograph.org.uk')) {
+          urlsToAttempt.push(primaryUrl.replace(/_120x120\.jpg$/i, '_1024x1024.jpg'));
+          urlsToAttempt.push(primaryUrl.replace(/_120x120\.jpg$/i, '_800x800.jpg'));
+          urlsToAttempt.push(primaryUrl.replace(/_120x120\.jpg$/i, '.jpg'));
+        }
+        urlsToAttempt.push(primaryUrl);
+        if (candidate.previewUrl && candidate.previewUrl !== primaryUrl) {
+          urlsToAttempt.push(candidate.previewUrl);
+        }
+      }
 
       // Handle custom graphic (Data URI SVG)
-      if (downloadTargetUrl?.startsWith('data:image/svg+xml;base64,')) {
-        const base64Data = downloadTargetUrl.replace('data:image/svg+xml;base64,', '');
+      if (primaryUrl?.startsWith('data:image/svg+xml;base64,')) {
+        const base64Data = primaryUrl.replace('data:image/svg+xml;base64,', '');
         fileBuffer = Buffer.from(base64Data, 'base64');
-      } else if (downloadTargetUrl?.startsWith('http://') || downloadTargetUrl?.startsWith('https://')) {
-        // Fetch from remote provider URL
-        const controller = new AbortController();
-        const timeout = setTimeout(() => controller.abort(), 45000); // 45s timeout for high-res video
+      } else if (urlsToAttempt.length > 0 && (urlsToAttempt[0].startsWith('http://') || urlsToAttempt[0].startsWith('https://'))) {
+        let downloadedOk = false;
+        let lastError = '';
 
-        let res = await fetch(downloadTargetUrl, {
-          signal: controller.signal,
-          headers: {
-            'User-Agent':
-              'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36 LocationCapture/1.0',
-            Accept: 'image/avif,image/webp,image/apng,image/svg+xml,image/*,video/*,*/*;q=0.8',
-          },
-        });
-        clearTimeout(timeout);
-
-        // Fallback to previewUrl if high-res download returned 404 or 403
-        if (!res.ok && candidate.previewUrl && candidate.previewUrl !== downloadTargetUrl) {
+        for (const targetUrl of [...new Set(urlsToAttempt)]) {
           try {
-            const fallbackRes = await fetch(candidate.previewUrl, {
+            const controller = new AbortController();
+            const timeout = setTimeout(() => controller.abort(), 45000); // 45s timeout for high-res
+
+            const res = await fetch(targetUrl, {
+              signal: controller.signal,
               headers: {
                 'User-Agent':
                   'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36 LocationCapture/1.0',
-                Accept: 'image/*,*/*;q=0.8',
+                Accept: 'image/avif,image/webp,image/apng,image/svg+xml,image/*,video/*,*/*;q=0.8',
               },
             });
-            if (fallbackRes.ok) {
-              res = fallbackRes;
+            clearTimeout(timeout);
+
+            if (res.ok) {
+              const arrayBuf = await res.arrayBuffer();
+              if (arrayBuf.byteLength > 2000) {
+                fileBuffer = Buffer.from(arrayBuf);
+                downloadedOk = true;
+                break;
+              }
+            } else {
+              lastError = `HTTP ${res.status}: ${res.statusText}`;
             }
-          } catch {
-            // Ignore fallback failure and throw original error below
+          } catch (fetchErr: any) {
+            lastError = fetchErr.message;
           }
         }
 
-        if (!res.ok) {
-          throw new Error(`Download failed with status ${res.status}: ${res.statusText}`);
+        if (!downloadedOk || !fileBuffer!) {
+          throw new Error(`Görsel indirme başarısız oldu. Son hata: ${lastError}`);
         }
-
-        const arrayBuf = await res.arrayBuffer();
-        fileBuffer = Buffer.from(arrayBuf);
       } else {
         // Provider does not permit direct download or requires manual action
         updateSceneDownloadStatus(
@@ -174,6 +187,40 @@ export class ProjectAssetDownloader {
 
       if (fileBuffer.length === 0) {
         throw new Error('Downloaded file is empty (0 bytes).');
+      }
+
+      // Resolution optimization: Ensure 1920x1080 Full HD (or preserve closest upper version)
+      if (candidate.mediaType === 'photograph' || (!filename.endsWith('.mp4') && !filename.endsWith('.svg'))) {
+        try {
+          const meta = await sharp(fileBuffer).metadata();
+          if (meta.width && meta.height) {
+            // If the image is smaller than 1920x1080 in either dimension, upscale it to 1920x1080 Full HD
+            if (meta.width < 1920 || meta.height < 1080) {
+              if (filename.endsWith('.png')) {
+                fileBuffer = await sharp(fileBuffer)
+                  .resize(1920, 1080, {
+                    fit: 'cover',
+                    position: 'center',
+                    kernel: sharp.kernel.lanczos3,
+                  })
+                  .png({ compressionLevel: 8 })
+                  .toBuffer();
+              } else {
+                fileBuffer = await sharp(fileBuffer)
+                  .resize(1920, 1080, {
+                    fit: 'cover',
+                    position: 'center',
+                    kernel: sharp.kernel.lanczos3,
+                  })
+                  .jpeg({ quality: 95, mozjpeg: true })
+                  .toBuffer();
+              }
+            }
+            // If already >= 1920x1080, keep the crisp high-resolution / closest upper version intact
+          }
+        } catch (imgErr: any) {
+          console.warn('Image post-processing notice:', imgErr.message);
+        }
       }
 
       // Write to project storage

@@ -182,7 +182,7 @@ export function ScriptToVisualsStudio({
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          useDemoData: !hasPexelsKey && !hasGeographKey,
+          useDemoData: false,
           generateCustomGraphics: !disableCustomGraphics,
         }),
       });
@@ -275,12 +275,21 @@ export function ScriptToVisualsStudio({
     setTimeout(() => setCopiedPromptId(null), 2500);
   };
 
+  const isAiSceneItem = (scene: ScriptScene) => {
+    if (scene.sceneType === 'ai_prompt') return true;
+    if (!scene.aiPrompt) return false;
+    const p = scene.aiPrompt.trim().toLowerCase();
+    return !['none', 'n/a', 'yok', 'no', 'null', 'undefined', '-', ''].includes(p);
+  };
+
   // Aggregate stats
   const totalCount = scenes.length;
-  const completedCount = scenes.filter((s) => s.searchStatus === 'completed').length;
-  const selectedCount = scenes.filter((s) => s.selectedCandidateId).length;
-  const downloadedCount = scenes.filter((s) => s.downloadStatus === 'completed').length;
-  const needsManualCount = scenes.filter((s) => s.searchStatus === 'needs_manual').length;
+  const aiCount = scenes.filter(isAiSceneItem).length;
+  const stockScenes = scenes.filter((s) => !isAiSceneItem(s));
+  const completedCount = stockScenes.filter((s) => s.searchStatus === 'completed' || s.selectedCandidateId).length;
+  const selectedCount = stockScenes.filter((s) => s.selectedCandidateId).length;
+  const downloadedCount = stockScenes.filter((s) => s.downloadStatus === 'completed').length;
+  const needsManualCount = stockScenes.filter((s) => s.searchStatus === 'needs_manual' && !s.selectedCandidateId).length;
 
   return (
     <div className="space-y-6">
@@ -373,22 +382,26 @@ export function ScriptToVisualsStudio({
 
       {/* İlerleme ve Durum Sayacı */}
       {scenes.length > 0 && (
-        <div className="grid grid-cols-2 sm:grid-cols-5 gap-3">
+        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
           <div className="p-3 bg-white rounded-lg border border-[#E2DBD0] text-center">
             <div className="text-xl font-bold text-[#1B2A41]">{totalCount}</div>
             <div className="text-[11px] text-[#71717A] font-medium">Toplam Sahne</div>
           </div>
           <div className="p-3 bg-white rounded-lg border border-[#E2DBD0] text-center">
             <div className="text-xl font-bold text-blue-600">{completedCount}</div>
-            <div className="text-[11px] text-[#71717A] font-medium">Görsel Bulundu</div>
+            <div className="text-[11px] text-[#71717A] font-medium">Stok Bulundu</div>
+          </div>
+          <div className="p-3 bg-white rounded-lg border border-purple-200 bg-purple-50/50 text-center">
+            <div className="text-xl font-bold text-purple-700">{aiCount}</div>
+            <div className="text-[11px] text-purple-800 font-bold">✨ AI Sahnesi (Atlandı)</div>
           </div>
           <div className="p-3 bg-white rounded-lg border border-[#E2DBD0] text-center">
             <div className="text-xl font-bold text-amber-600">{selectedCount}</div>
-            <div className="text-[11px] text-[#71717A] font-medium">Seçilen Varlık</div>
+            <div className="text-[11px] text-[#71717A] font-medium">Seçilen Stok</div>
           </div>
           <div className="p-3 bg-white rounded-lg border border-[#E2DBD0] text-center">
             <div className="text-xl font-bold text-emerald-600">{downloadedCount}</div>
-            <div className="text-[11px] text-[#71717A] font-medium">İndirildi (01..09)</div>
+            <div className="text-[11px] text-[#71717A] font-medium">İndirildi (HD)</div>
           </div>
           <div className="p-3 bg-white rounded-lg border border-[#E2DBD0] text-center">
             <div className="text-xl font-bold text-rose-600">{needsManualCount}</div>
@@ -437,6 +450,7 @@ export function ScriptToVisualsStudio({
       {/* Sahne Listesi */}
       <div className="space-y-4">
         {scenes.map((scene) => {
+          const isAi = isAiSceneItem(scene);
           const sceneCandidates = candidates.filter((c) => c.sceneId === scene.id);
           const selectedCandidate = scene.selectedCandidateId
             ? candidates.find((c) => c.id === scene.selectedCandidateId) || scene.selectedAssetSnapshot
@@ -445,12 +459,16 @@ export function ScriptToVisualsStudio({
           return (
             <div
               key={scene.id}
-              className="bg-white rounded-xl border border-[#E2DBD0] shadow-2xs overflow-hidden transition-all hover:border-[#FD9E76]/50"
+              className={`bg-white rounded-xl border shadow-2xs overflow-hidden transition-all ${
+                isAi
+                  ? 'border-purple-300 ring-1 ring-purple-100 hover:border-purple-400'
+                  : 'border-[#E2DBD0] hover:border-[#FD9E76]/50'
+              }`}
             >
               {/* Sahne Başlığı */}
               <div className="p-4 bg-gradient-to-r from-white to-[#FAF7F2] border-b border-[#E2DBD0] flex flex-col md:flex-row md:items-center justify-between gap-3">
                 <div className="flex flex-wrap items-center gap-2">
-                  <span className="px-2.5 py-1 rounded bg-[#1B2A41] text-white font-mono text-xs font-bold">
+                  <span className={`px-2.5 py-1 rounded text-white font-mono text-xs font-bold ${isAi ? 'bg-purple-800' : 'bg-[#1B2A41]'}`}>
                     #{String(scene.sceneNumber).padStart(2, '0')}
                   </span>
                   <span className="px-2 py-0.5 rounded bg-[#FAF7F2] border border-[#E2DBD0] text-[#1B2A41] text-xs font-medium flex items-center">
@@ -460,6 +478,12 @@ export function ScriptToVisualsStudio({
                   {scene.triggerPhrase && (
                     <span className="px-2 py-0.5 rounded bg-amber-50 border border-amber-200 text-amber-900 text-xs font-semibold">
                       Tetikleyici: &quot;{scene.triggerPhrase}&quot;
+                    </span>
+                  )}
+                  {isAi && (
+                    <span className="px-2.5 py-0.5 rounded bg-purple-600 text-white text-xs font-bold flex items-center shadow-2xs">
+                      <Sparkles className="w-3.5 h-3.5 mr-1 text-amber-300" />
+                      ✨ AI Sahnesi (Stok Arama Atlandı)
                     </span>
                   )}
                   {scene.sceneType === 'custom_graphic' && (
@@ -478,23 +502,32 @@ export function ScriptToVisualsStudio({
 
                 {/* Sahne Durum Göstergesi */}
                 <div className="flex items-center space-x-2">
-                  {scene.searchStatus === 'searching' && (
-                    <span className="px-2.5 py-1 rounded bg-blue-50 text-blue-800 text-[11px] font-semibold flex items-center">
-                      <RefreshCw className="w-3 h-3 mr-1 animate-spin" />
-                      Aranıyor...
+                  {isAi ? (
+                    <span className="px-2.5 py-1 rounded bg-purple-100 border border-purple-200 text-purple-900 text-[11px] font-bold flex items-center">
+                      <Sparkles className="w-3 h-3 mr-1 text-purple-600" />
+                      AI Promptuna Ayrıldı (Atlandı)
                     </span>
-                  )}
-                  {scene.downloadStatus === 'completed' && (
-                    <span className="px-2.5 py-1 rounded bg-emerald-50 text-emerald-800 text-[11px] font-semibold flex items-center">
-                      <CheckCircle2 className="w-3 h-3 mr-1 text-emerald-600" />
-                      İndirildi: {scene.downloadedFilename}
-                    </span>
-                  )}
-                  {scene.searchStatus === 'needs_manual' && (
-                    <span className="px-2.5 py-1 rounded bg-rose-50 text-rose-800 text-[11px] font-semibold flex items-center">
-                      <AlertCircle className="w-3 h-3 mr-1 text-rose-600" />
-                      Manuel Arama Gerekiyor
-                    </span>
+                  ) : (
+                    <>
+                      {scene.searchStatus === 'searching' && (
+                        <span className="px-2.5 py-1 rounded bg-blue-50 text-blue-800 text-[11px] font-semibold flex items-center">
+                          <RefreshCw className="w-3 h-3 mr-1 animate-spin" />
+                          Aranıyor...
+                        </span>
+                      )}
+                      {scene.downloadStatus === 'completed' && (
+                        <span className="px-2.5 py-1 rounded bg-emerald-50 text-emerald-800 text-[11px] font-semibold flex items-center">
+                          <CheckCircle2 className="w-3 h-3 mr-1 text-emerald-600" />
+                          İndirildi: {scene.downloadedFilename}
+                        </span>
+                      )}
+                      {scene.searchStatus === 'needs_manual' && !scene.selectedCandidateId && (
+                        <span className="px-2.5 py-1 rounded bg-rose-50 text-rose-800 text-[11px] font-semibold flex items-center">
+                          <AlertCircle className="w-3 h-3 mr-1 text-rose-600" />
+                          Manuel Arama Gerekiyor
+                        </span>
+                      )}
+                    </>
                   )}
                 </div>
               </div>
@@ -509,18 +542,20 @@ export function ScriptToVisualsStudio({
                 )}
 
                 {/* Arama Sorgu Alternatifleri */}
-                <div className="flex flex-wrap items-center gap-1.5 pt-1">
-                  <span className="font-bold text-[#71717A]">Arama Terimleri:</span>
-                  {scene.searchQueries.map((q, qIdx) => (
-                    <span
-                      key={qIdx}
-                      className="px-2 py-0.5 rounded bg-[#FAF7F2] border border-[#E2DBD0] text-[#1B2A41] text-[11px] font-medium"
-                    >
-                      {qIdx === 0 && '⭐ '}
-                      {q}
-                    </span>
-                  ))}
-                </div>
+                {!isAi && scene.searchQueries.length > 0 && (
+                  <div className="flex flex-wrap items-center gap-1.5 pt-1">
+                    <span className="font-bold text-[#71717A]">Arama Terimleri:</span>
+                    {scene.searchQueries.map((q, qIdx) => (
+                      <span
+                        key={qIdx}
+                        className="px-2 py-0.5 rounded bg-[#FAF7F2] border border-[#E2DBD0] text-[#1B2A41] text-[11px] font-medium"
+                      >
+                        {qIdx === 0 && '⭐ '}
+                        {q}
+                      </span>
+                    ))}
+                  </div>
+                )}
 
                 {scene.visualNotes && (
                   <div className="text-[#71717A]">
@@ -530,15 +565,15 @@ export function ScriptToVisualsStudio({
 
                 {/* AI / Canlandırma İstemi Varsa */}
                 {scene.aiPrompt && (
-                  <div className="p-2.5 rounded bg-[#FAF7F2] border border-[#E2DBD0] flex items-center justify-between gap-2">
+                  <div className="p-2.5 rounded bg-purple-50/60 border border-purple-200 flex items-center justify-between gap-2">
                     <div className="truncate text-[#1B2A41]">
-                      <span className="font-bold text-[#FD9E76]">Yapay Zeka İstemi (Tarihi Canlandırma):</span>{' '}
-                      <span className="font-mono text-[11px]">{scene.aiPrompt}</span>
+                      <span className="font-bold text-purple-700">✨ Yapay Zeka İstemi:</span>{' '}
+                      <span className="font-mono text-[11px] text-purple-950">{scene.aiPrompt}</span>
                     </div>
                     <button
                       type="button"
                       onClick={() => handleCopyPrompt(scene.aiPrompt!, scene.id)}
-                      className="px-2.5 py-1 rounded bg-white hover:bg-gray-100 border border-[#E2DBD0] text-[11px] font-semibold text-[#1B2A41] shrink-0 flex items-center space-x-1"
+                      className="px-2.5 py-1 rounded bg-white hover:bg-purple-100 border border-purple-200 text-[11px] font-semibold text-purple-900 shrink-0 flex items-center space-x-1 shadow-2xs"
                     >
                       {copiedPromptId === scene.id ? (
                         <>
@@ -547,7 +582,7 @@ export function ScriptToVisualsStudio({
                         </>
                       ) : (
                         <>
-                          <Copy className="w-3 h-3 text-[#71717A]" />
+                          <Copy className="w-3 h-3 text-purple-600" />
                           <span>Kopyala</span>
                         </>
                       )}
@@ -556,134 +591,169 @@ export function ScriptToVisualsStudio({
                 )}
               </div>
 
-              {/* Aday Görseller Galerisi */}
-              <div className="p-4 bg-[#FAF7F2]/50">
-                <div className="flex items-center justify-between mb-3">
-                  <div className="text-xs font-bold text-[#1B2A41] flex items-center space-x-1.5">
-                    <SlidersHorizontal className="w-3.5 h-3.5 text-[#FD9E76]" />
-                    <span>Bulunan Aday Görseller ({sceneCandidates.length}):</span>
+              {/* Aday Görseller Galerisi veya AI İstemi Kartı */}
+              {isAi ? (
+                <div className="p-4 bg-purple-50/40">
+                  <div className="p-4 bg-white rounded-lg border border-purple-200 shadow-2xs space-y-3">
+                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                      <div className="flex items-center space-x-2">
+                        <Sparkles className="w-4 h-4 text-purple-600 shrink-0" />
+                        <h4 className="text-xs font-bold text-purple-950">
+                          Sahne #{scene.sceneNumber} — Yapay Zeka Canlandırma Sahnesi
+                        </h4>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => handleCopyPrompt(scene.aiPrompt || '', scene.id)}
+                        className="px-3 py-1.5 rounded-lg bg-purple-600 hover:bg-purple-700 text-white text-xs font-bold transition-all shadow-2xs flex items-center space-x-1.5 self-start sm:self-auto"
+                      >
+                        {copiedPromptId === scene.id ? (
+                          <>
+                            <Check className="w-3.5 h-3.5 text-emerald-300" />
+                            <span>İstem Kopyalandı!</span>
+                          </>
+                        ) : (
+                          <>
+                            <Copy className="w-3.5 h-3.5" />
+                            <span>Promptu Kopyala (Midjourney / Flux)</span>
+                          </>
+                        )}
+                      </button>
+                    </div>
+
+                    <div className="p-3 bg-purple-50/50 rounded-lg border border-purple-100 font-mono text-xs text-purple-950 leading-relaxed select-all">
+                      {scene.aiPrompt}
+                    </div>
+
+                    <p className="text-[11px] text-purple-700 leading-relaxed">
+                      💡 Bu sahne tarihi veya senaryo canlandırması içerdiği için stok görsel aramasından ve indirmeden muaf tutulmuştur (atlandı). Görseli oluşturmak için yukarıdaki promptu kopyalayıp Midjourney, Flux veya tercih ettiğiniz yapay zeka aracına yapıştırınız.
+                    </p>
                   </div>
-                  {selectedCandidate && (
-                    <button
-                      type="button"
-                      onClick={() => handleDownloadAssets(scene.id)}
-                      disabled={isDownloading || scene.downloadStatus === 'completed'}
-                      className="px-3 py-1 rounded bg-[#1B2A41] text-white hover:bg-[#243856] text-xs font-semibold disabled:opacity-50 flex items-center space-x-1"
-                    >
-                      <Download className="w-3 h-3 text-[#FD9E76]" />
-                      <span>{scene.downloadStatus === 'completed' ? 'Dosya İndirildi' : 'Bu Sahneyi İndir'}</span>
-                    </button>
-                  )}
                 </div>
-
-                {sceneCandidates.length === 0 ? (
-                  <div className="p-6 text-center bg-white rounded-lg border border-[#E2DBD0] text-xs text-[#71717A]">
-                    Bu sahne için henüz arama yapılmadı. Yukarıdaki &quot;Tüm Sahneleri Ara&quot; butonuna tıklayarak aramayı başlatın.
+              ) : (
+                <div className="p-4 bg-[#FAF7F2]/50">
+                  <div className="flex items-center justify-between mb-3">
+                    <div className="text-xs font-bold text-[#1B2A41] flex items-center space-x-1.5">
+                      <SlidersHorizontal className="w-3.5 h-3.5 text-[#FD9E76]" />
+                      <span>Bulunan Aday Görseller ({sceneCandidates.length}):</span>
+                    </div>
+                    {selectedCandidate && (
+                      <button
+                        type="button"
+                        onClick={() => handleDownloadAssets(scene.id)}
+                        disabled={isDownloading || scene.downloadStatus === 'completed'}
+                        className="px-3 py-1 rounded bg-[#1B2A41] text-white hover:bg-[#243856] text-xs font-semibold disabled:opacity-50 flex items-center space-x-1"
+                      >
+                        <Download className="w-3 h-3 text-[#FD9E76]" />
+                        <span>{scene.downloadStatus === 'completed' ? 'Dosya İndirildi' : 'Bu Sahneyi İndir'}</span>
+                      </button>
+                    )}
                   </div>
-                ) : (
-                  <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
-                    {sceneCandidates.map((cand) => {
-                      const isSelected = scene.selectedCandidateId === cand.id;
 
-                      return (
-                        <div
-                          key={cand.id}
-                          className={`bg-white rounded-lg border overflow-hidden transition-all flex flex-col ${
-                            isSelected
-                              ? 'border-[#1B2A41] ring-2 ring-[#1B2A41] shadow-md'
-                              : 'border-[#E2DBD0] hover:border-[#FD9E76]'
-                          }`}
-                        >
-                          {/* Görsel / Video Önizleme */}
-                          <div className="relative aspect-video bg-[#1B2A41] overflow-hidden group">
-                            {cand.mediaType === 'video' ? (
-                              <div className="relative w-full h-full flex items-center justify-center bg-black">
-                                <img
-                                  src={cand.previewUrl}
-                                  alt={cand.title}
-                                  className="w-full h-full object-cover opacity-80"
-                                />
-                                <div className="absolute inset-0 flex items-center justify-center">
-                                  <div className="w-8 h-8 rounded-full bg-black/60 text-white flex items-center justify-center">
-                                    <Film className="w-4 h-4 text-[#FD9E76]" />
-                                  </div>
+                  {sceneCandidates.length === 0 ? (
+                    <div className="p-6 text-center bg-white rounded-lg border border-[#E2DBD0] text-xs text-[#71717A]">
+                      Bu sahne için henüz arama yapılmadı. Yukarıdaki &quot;Tüm Sahneleri Ara&quot; butonuna tıklayarak aramayı başlatın.
+                    </div>
+                  ) : (
+                    <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
+                      {sceneCandidates.map((cand) => {
+                        const isSelected = scene.selectedCandidateId === cand.id;
+
+                        return (
+                          <div
+                            key={cand.id}
+                            className={`bg-white rounded-lg border overflow-hidden transition-all flex flex-col ${
+                              isSelected
+                                ? 'border-[#1B2A41] ring-2 ring-[#1B2A41] shadow-md'
+                                : 'border-[#E2DBD0] hover:border-[#FD9E76]'
+                            }`}
+                          >
+                            {/* Görsel / Video Önizleme */}
+                            <div className="relative aspect-video bg-[#1B2A41] overflow-hidden group">
+                              {cand.mediaType === 'video' ? (
+                                <div className="relative w-full h-full flex items-center justify-center bg-black">
+                                  {cand.previewUrl ? (
+                                    <video
+                                      src={cand.previewUrl}
+                                      className="w-full h-full object-cover"
+                                      muted
+                                      loop
+                                      onMouseOver={(e) => (e.target as HTMLVideoElement).play()}
+                                      onMouseOut={(e) => {
+                                        const v = e.target as HTMLVideoElement;
+                                        v.pause();
+                                        v.currentTime = 0;
+                                      }}
+                                    />
+                                  ) : (
+                                    <Film className="w-8 h-8 text-white/50" />
+                                  )}
+                                  <span className="absolute top-1.5 left-1.5 px-1.5 py-0.5 rounded bg-black/70 text-white font-mono text-[10px] flex items-center">
+                                    <Film className="w-2.5 h-2.5 mr-1 text-[#FD9E76]" />
+                                    {cand.durationSeconds ? `${cand.durationSeconds}s` : 'VİDEO'}
+                                  </span>
                                 </div>
-                              </div>
-                            ) : (
-                              <img
-                                src={cand.previewUrl}
-                                alt={cand.title}
-                                className="w-full h-full object-cover transition-transform group-hover:scale-105"
-                              />
-                            )}
+                              ) : (
+                                <div className="relative w-full h-full">
+                                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                                  <img
+                                    src={cand.previewUrl}
+                                    alt={cand.title}
+                                    className="w-full h-full object-cover transition-transform duration-300 group-hover:scale-105"
+                                  />
+                                </div>
+                              )}
 
-                            {/* Sağlayıcı & Tür Rozetleri */}
-                            <div className="absolute top-2 left-2 flex items-center space-x-1">
-                              <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-[#1B2A41]/90 text-white">
-                                {cand.providerId.toUpperCase()}
-                              </span>
                               {cand.isRecommended && (
-                                <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-[#FD9E76] text-[#1B2A41]">
-                                  ÖNERİLEN
+                                <span className="absolute top-1.5 right-1.5 px-1.5 py-0.5 rounded bg-amber-500 text-white text-[10px] font-bold shadow-xs flex items-center">
+                                  <Sparkles className="w-2.5 h-2.5 mr-0.5" />
+                                  Önerilen
                                 </span>
                               )}
                             </div>
 
-                            {cand.durationSeconds && (
-                              <span className="absolute bottom-2 right-2 px-1.5 py-0.5 rounded text-[10px] font-mono font-bold bg-black/75 text-white">
-                                {cand.durationSeconds}s
-                              </span>
-                            )}
-                          </div>
-
-                          {/* Bilgiler ve Seç Butonu */}
-                          <div className="p-3 flex-1 flex flex-col justify-between space-y-2">
-                            <div>
-                              <h4 className="font-bold text-xs text-[#1B2A41] line-clamp-1" title={cand.title}>
-                                {cand.title}
-                              </h4>
-                              <div className="text-[11px] text-[#71717A] mt-0.5 truncate">
-                                {cand.creator} • {cand.licenceName}
+                            {/* Görsel Detayı & Seçim */}
+                            <div className="p-2.5 flex-1 flex flex-col justify-between space-y-2">
+                              <div>
+                                <h5 className="font-semibold text-xs text-[#1B2A41] line-clamp-1" title={cand.title}>
+                                  {cand.title}
+                                </h5>
+                                <p className="text-[10px] text-[#71717A] line-clamp-2 mt-0.5" title={cand.description}>
+                                  {cand.description}
+                                </p>
                               </div>
-                              <div className="text-[10px] font-medium text-amber-700 mt-1">
-                                {cand.matchType === 'exact_location' && '📍 Tam Konum Eşleşmesi'}
-                                {cand.matchType === 'nearby_reference' && '🧭 Yakın Referans'}
-                                {cand.matchType === 'custom_graphic' && '🎨 Özel Grafik Kartı'}
-                                {cand.matchType === 'historic_reconstruction' && '🏛️ Tarihi Canlandırma'}
-                                {cand.matchType === 'generic_visual' && '👁️ Genel Görsel Eşleşme'}
+
+                              <div className="pt-2 border-t border-[#E2DBD0] flex items-center justify-between">
+                                <span className="text-[10px] text-[#71717A] truncate font-medium">
+                                  {cand.providerId === 'geograph'
+                                    ? 'Geograph UK'
+                                    : cand.providerId === 'pexels'
+                                    ? 'Pexels'
+                                    : cand.providerId === 'openverse'
+                                    ? 'Openverse Stok'
+                                    : 'Grafik'}
+                                </span>
+
+                                <button
+                                  type="button"
+                                  onClick={() => handleSelectCandidate(scene.id, cand.id)}
+                                  className={`px-2.5 py-1 rounded text-[11px] font-bold transition-all ${
+                                    isSelected
+                                      ? 'bg-emerald-600 text-white'
+                                      : 'bg-[#FAF7F2] hover:bg-[#E2DBD0] text-[#1B2A41] border border-[#E2DBD0]'
+                                  }`}
+                                >
+                                  {isSelected ? '✓ Seçildi' : 'Seç'}
+                                </button>
                               </div>
                             </div>
-
-                            <div className="pt-2 border-t border-[#E2DBD0] flex items-center justify-between">
-                              <a
-                                href={cand.originalUrl}
-                                target="_blank"
-                                rel="noreferrer"
-                                className="text-[11px] text-[#71717A] hover:text-[#1B2A41] flex items-center space-x-1"
-                              >
-                                <span>Kaynak</span>
-                                <ExternalLink className="w-3 h-3" />
-                              </a>
-
-                              <button
-                                type="button"
-                                onClick={() => handleSelectCandidate(scene.id, cand.id)}
-                                className={`px-3 py-1 rounded text-xs font-bold transition-all ${
-                                  isSelected
-                                    ? 'bg-[#1B2A41] text-white shadow-xs'
-                                    : 'bg-[#FAF7F2] hover:bg-[#FD9E76]/20 text-[#1B2A41] border border-[#E2DBD0]'
-                                }`}
-                              >
-                                {isSelected ? '✓ Seçildi' : 'Seç'}
-                              </button>
-                            </div>
                           </div>
-                        </div>
-                      );
-                    })}
-                  </div>
-                )}
-              </div>
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
+              )}
             </div>
           );
         })}

@@ -14,7 +14,7 @@ export interface SourceCapabilities {
 
 export interface SearchResultItem {
   id: string;
-  providerId: 'geograph' | 'pexels' | 'google_maps' | 'google_earth' | 'stock_video' | 'manual_upload' | 'custom_graphic';
+  providerId: 'geograph' | 'pexels' | 'openverse' | 'google_maps' | 'google_earth' | 'stock_video' | 'manual_upload' | 'custom_graphic';
   externalAssetId: string;
   title: string;
   description: string;
@@ -31,12 +31,14 @@ export interface SearchResultItem {
   longitude?: number;
   distanceMeters?: number;
   mediaType: MediaType;
+  width?: number;
+  height?: number;
   isDemoData?: boolean;
 }
 
 export interface ProviderSearchParams {
-  latitude: number;
-  longitude: number;
+  latitude?: number;
+  longitude?: number;
   locationName: string;
   postcode?: string;
   radiusKm?: number;

@@ -27,14 +27,16 @@ export class GoogleMapsAdapter implements SourceAdapter {
   }
 
   public async search(params: ProviderSearchParams): Promise<SearchResultItem[]> {
-    const mapsUrl = GoogleMapsAdapter.getMapsUrl(params.latitude, params.longitude);
-    const streetViewUrl = GoogleMapsAdapter.getStreetViewUrl(params.latitude, params.longitude);
+    const lat = params.latitude ?? 54.0;
+    const lon = params.longitude ?? -2.0;
+    const mapsUrl = GoogleMapsAdapter.getMapsUrl(lat, lon);
+    const streetViewUrl = GoogleMapsAdapter.getStreetViewUrl(lat, lon);
 
     return [
       {
-        id: `gmaps_${params.latitude.toFixed(4)}_${params.longitude.toFixed(4)}`,
+        id: `gmaps_${lat.toFixed(4)}_${lon.toFixed(4)}`,
         providerId: 'google_maps',
-        externalAssetId: `${params.latitude},${params.longitude}`,
+        externalAssetId: `${lat},${lon}`,
         title: `Google Maps & Street View Context: ${params.locationName}`,
         description: `Inspect street-level architecture, building facades, and neighborhood topography for ${params.locationName} directly in your browser.`,
         originalUrl: mapsUrl,
@@ -45,8 +47,8 @@ export class GoogleMapsAdapter implements SourceAdapter {
         commercialUseStatus: 'restricted',
         adaptationRestrictions:
           'Terms strictly prohibit scraping, automated tile capture, or using unapproved screenshots in commercial broadcast media.',
-        latitude: params.latitude,
-        longitude: params.longitude,
+        latitude: lat,
+        longitude: lon,
         distanceMeters: 0,
         mediaType: 'map_reference',
         isDemoData: false,

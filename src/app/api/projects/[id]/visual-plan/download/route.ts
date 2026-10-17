@@ -4,7 +4,9 @@ import {
   listScriptScenesByProject,
   listSceneCandidatesByProject,
   getScriptScene,
-  selectSceneCandidate
+  selectSceneCandidate,
+  deduplicateSceneRecommendations,
+  isAiScene
 } from '@/lib/database/db';
 import { ProjectAssetDownloader } from '@/lib/storage/project-asset-downloader';
 import { BatchExportManager } from '@/lib/exports/batch-export-manager';
@@ -26,14 +28,34 @@ export async function POST(
     const body = await request.json().catch(() => ({}));
     const { sceneId } = body;
 
+    // Ensure distinct candidates are selected before download
+    try {
+      deduplicateSceneRecommendations(projectId);
+    } catch {
+      // Non-blocking
+    }
+
     const allScenes = listScriptScenesByProject(projectId);
     const allCandidates = listSceneCandidatesByProject(projectId);
     const candidateMap = new Map(allCandidates.map((c) => [c.id, c]));
 
     let targetScenes = allScenes;
     if (sceneId) {
+      const singleScene = allScenes.find((s) => s.id === sceneId);
+      if (singleScene && isAiScene(singleScene)) {
+        return NextResponse.json(
+          {
+            success: false,
+            error: `Sahne #${singleScene.sceneNumber} bir AI canlandırma sahnesidir. Stok görsel aranmaz ve indirilmez; Midjourney / Flux promptu ile üretilmelidir.`
+          },
+          { status: 400 }
+        );
+      }
       targetScenes = targetScenes.filter((s) => s.id === sceneId);
     } else {
+      // Exclude AI scenes: AI prompt scenes are reserved for manual AI visual generation and must not be downloaded as stock
+      targetScenes = targetScenes.filter((s) => !isAiScene(s));
+
       // If no specific sceneId, filter for scenes that either have selectedCandidateId or have available candidates
       targetScenes = targetScenes.filter((s) => {
         if (s.selectedCandidateId) return true;
@@ -43,7 +65,7 @@ export async function POST(
 
     if (targetScenes.length === 0) {
       return NextResponse.json(
-        { success: false, error: 'Aday görseli bulunan veya seçilmiş sahne bulunamadı.' },
+        { success: false, error: 'İndirilecek onaylı stok görsel sahnesi bulunamadı (AI sahneleri otomatik olarak atlanır).' },
         { status: 400 }
       );
     }

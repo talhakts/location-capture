@@ -11,7 +11,11 @@ import { GraphicGenerator } from '../graphics/graphic-generator';
 import {
   saveSceneCandidates,
   updateScriptScene,
-  selectSceneCandidate
+  selectSceneCandidate,
+  listScriptScenesByProject,
+  deduplicateSceneRecommendations,
+  isAiScene,
+  getDatabase
 } from '../database/db';
 
 export interface BatchSearchOptions {
@@ -37,16 +41,83 @@ const UK_TOWN_COORDINATES: Record<string, { lat: number; lon: number }> = {
   london: { lat: 51.5074, lon: -0.1278 },
   manchester: { lat: 53.4808, lon: -2.2426 },
   newcastle: { lat: 54.9783, lon: -1.6178 },
+  birmingham: { lat: 52.4862, lon: -1.8904 },
+  liverpool: { lat: 53.4084, lon: -2.9916 },
+  leeds: { lat: 53.8008, lon: -1.5491 },
+  sheffield: { lat: 53.3811, lon: -1.4701 },
+  bristol: { lat: 51.4545, lon: -2.5879 },
+  cornwall: { lat: 50.2660, lon: -5.0527 },
+  devon: { lat: 50.7155, lon: -3.5309 },
+  cumbria: { lat: 54.5772, lon: -2.7975 },
+  yorkshire: { lat: 53.9590, lon: -1.0815 },
+  sunderland: { lat: 54.9069, lon: -1.3838 },
+  middlesbrough: { lat: 54.5742, lon: -1.2350 },
+  hartlepool: { lat: 54.6862, lon: -1.2129 },
+  hastings: { lat: 50.8552, lon: 0.5729 },
+  eastbourne: { lat: 50.7680, lon: 0.2905 },
+  skegness: { lat: 53.1432, lon: 0.3412 },
+  greatyarmouth: { lat: 52.6083, lon: 1.7306 },
+  torquay: { lat: 50.4619, lon: -3.5253 },
+  weymouth: { lat: 50.6137, lon: -2.4576 }
 };
 
-function resolveTownCoordinates(locationName?: string, queryText?: string): { lat: number; lon: number } {
+function resolveTownCoordinates(locationName?: string, queryText?: string): { lat: number; lon: number } | undefined {
   const combined = `${locationName || ''} ${queryText || ''}`.toLowerCase();
   for (const [town, coords] of Object.entries(UK_TOWN_COORDINATES)) {
     if (combined.includes(town)) {
       return coords;
     }
   }
-  return { lat: 54.0, lon: -2.0 }; // Central UK coordinates
+  return undefined;
+}
+/**
+ * Determines whether a scene represents a UK geographical location (street, city, landscape, town)
+ * vs an object, concept, interior, or generic stock visual.
+ *
+ * Kural: Sadece mekan/sokak/şehir sahneleri Geograph'tan,
+ * geri kalan nesne ve diğer stok görselleri Pexels'ten aranır.
+ */
+export function isLocationScene(scene: ScriptScene): boolean {
+  // 1. Explicit override if present in notes or content
+  const explicitText = `${scene.unparsedContent || ''} ${scene.visualNotes || ''} ${scene.sceneType || ''}`.toLowerCase();
+  if (explicitText.includes('geograph') || explicitText.includes('mekan') || explicitText.includes('sokak') || explicitText.includes('location')) {
+    return true;
+  }
+  if (explicitText.includes('pexels') || explicitText.includes('nesne') || explicitText.includes('stok') || explicitText.includes('object')) {
+    return false;
+  }
+
+  // 2. Named UK Location present
+  if (scene.namedLocation && scene.namedLocation.trim().length > 0) {
+    return true;
+  }
+
+  // 3. Scan all scene text for location / street / city / geography keywords
+  const combinedText = [
+    scene.voiceover || '',
+    scene.visualNotes || '',
+    scene.unparsedContent || '',
+    ...(scene.searchQueries || []),
+    scene.triggerPhrase || '',
+  ].join(' ').toLowerCase();
+
+  const locationIndicators = [
+    'street', 'road', 'lane', 'avenue', 'terrace', 'crescent', 'alley', 'cul-de-sac', 'drive',
+    'town', 'city', 'village', 'suburb', 'borough', 'county',
+    'coast', 'coastal', 'beach', 'cliff', 'seafront', 'harbour', 'harbor', 'pier', 'promenade', 'bay',
+    'colliery', 'mine', 'pit', 'station', 'school', 'church', 'park', 'bridge', 'pub', 'shopfront', 'high street',
+    'exterior', 'facade', 'architecture', 'landscape', 'terraced house', 'brick house',
+    'blackpool', 'durham', 'easington', 'london', 'morecambe', 'newcastle', 'sunderland', 'yorkshire', 'cumbria'
+  ];
+
+  for (const kw of locationIndicators) {
+    const regex = new RegExp(`\\b${kw}\\b`, 'i');
+    if (regex.test(combinedText)) {
+      return true;
+    }
+  }
+
+  return false;
 }
 
 export class BatchSearchCoordinator {
@@ -60,13 +131,31 @@ export class BatchSearchCoordinator {
     processed: number;
     succeeded: number;
     failed: number;
+    aiSkipped: number;
     totalCandidates: number;
   }> {
     const concurrency = options.concurrency || 2;
     let processed = 0;
     let succeeded = 0;
     let failed = 0;
+    let aiSkipped = 0;
     let totalCandidates = 0;
+
+    // Track assigned candidates to prevent duplicate suggestions across scenes
+    const usedAssetKeys = new Set<string>();
+
+    if (scenes.length > 0) {
+      const allProjectScenes = listScriptScenesByProject(scenes[0].projectId);
+      const searchingSceneIds = new Set(scenes.map((s) => s.id));
+      for (const s of allProjectScenes) {
+        if (!searchingSceneIds.has(s.id) && s.selectedAssetSnapshot) {
+          const snapshot = s.selectedAssetSnapshot;
+          if (snapshot.providerId && snapshot.externalAssetId) {
+            usedAssetKeys.add(`${snapshot.providerId}_${snapshot.externalAssetId}`);
+          }
+        }
+      }
+    }
 
     // Process with concurrency pool
     const queue = [...scenes];
@@ -75,6 +164,28 @@ export class BatchSearchCoordinator {
         const scene = queue.shift();
         if (!scene) break;
 
+        // Skip AI scenes: AI prompt scenes are reserved for manual AI visual generation (Midjourney/Flux)
+        if (isAiScene(scene)) {
+          updateScriptScene(scene.id, {
+            sceneType: 'ai_prompt',
+            searchStatus: 'completed',
+            selectedCandidateId: undefined,
+            selectedAssetSnapshot: undefined,
+          });
+
+          try {
+            const db = getDatabase();
+            db.prepare('DELETE FROM scene_candidates WHERE sceneId = ?').run(scene.id);
+          } catch {
+            // Non-blocking
+          }
+
+          aiSkipped++;
+          processed++;
+          options.onSceneProgress?.(scene.id, 'completed', 0);
+          continue;
+        }
+
         try {
           updateScriptScene(scene.id, { searchStatus: 'searching' });
           options.onSceneProgress?.(scene.id, 'searching', 0);
@@ -82,7 +193,8 @@ export class BatchSearchCoordinator {
           const candidates = await this.searchForScene(
             scene,
             options.useDemoData,
-            options.generateCustomGraphics
+            options.generateCustomGraphics,
+            usedAssetKeys
           );
 
           if (candidates.length > 0) {
@@ -120,10 +232,20 @@ export class BatchSearchCoordinator {
 
     await Promise.all(workers);
 
+    // Final deduplication pass to ensure 100% distinct selections across all scenes
+    if (scenes.length > 0 && scenes[0].projectId) {
+      try {
+        deduplicateSceneRecommendations(scenes[0].projectId);
+      } catch (dedupErr: any) {
+        console.warn('Deduplication notice:', dedupErr.message);
+      }
+    }
+
     return {
       processed,
       succeeded,
       failed,
+      aiSkipped,
       totalCandidates,
     };
   }
@@ -134,8 +256,13 @@ export class BatchSearchCoordinator {
   public static async searchForScene(
     scene: ScriptScene,
     useDemoData: boolean = false,
-    generateCustomGraphics: boolean = false
+    generateCustomGraphics: boolean = false,
+    usedAssetKeys?: Set<string>
   ): Promise<SceneCandidateResult[]> {
+    if (isAiScene(scene)) {
+      return [];
+    }
+
     const candidates: SceneCandidateResult[] = [];
     const seenExternalIds = new Set<string>();
 
@@ -146,62 +273,73 @@ export class BatchSearchCoordinator {
     const pexelsAdapter = sourceRegistry.get('pexels') as PexelsAdapter | undefined;
     const geographAdapter = sourceRegistry.get('geograph') as GeographAdapter | undefined;
 
-    // Search query alternatives in order
-    for (const query of queries.slice(0, 3)) {
-      const coords = resolveTownCoordinates(scene.namedLocation, query);
+    const maxCandidates = 10;
+    const isLocation = isLocationScene(scene);
 
-      // Search Pexels (Stock videos and photos)
-      if (pexelsAdapter) {
-        try {
-          const pexelsResults = await pexelsAdapter.search({
-            queryText: query,
-            locationName: scene.namedLocation || query,
-            latitude: coords.lat,
-            longitude: coords.lon,
-            perPage: 6,
-            useDemoData,
-          });
-
-          for (const item of pexelsResults) {
-            const key = `pexels_${item.externalAssetId}`;
-            if (!seenExternalIds.has(key)) {
-              seenExternalIds.add(key);
-              candidates.push(this.mapSearchItemToCandidate(item, scene, query));
-            }
-          }
-        } catch (err: any) {
-          console.warn(`Pexels error for query "${query}":`, err.message);
-        }
-      }
-
-      // Search Geograph (Authentic UK geographic photography)
+    if (isLocation) {
+      // 1. SADECE MEKAN / SOKAK / ŞEHİR SAHNELERİ: Doğrudan Geograph
       if (geographAdapter) {
-        try {
-          const geographResults = await geographAdapter.search({
-            queryText: query,
-            locationName: scene.namedLocation || 'UK',
-            latitude: coords.lat,
-            longitude: coords.lon,
-            radiusKm: 20,
-            perPage: 6,
-            useDemoData,
-          });
+        for (const query of queries.slice(0, 2)) {
+          const coords = resolveTownCoordinates(scene.namedLocation, query);
+          try {
+            const geographResults = await geographAdapter.search({
+              queryText: query,
+              locationName: scene.namedLocation || '',
+              latitude: coords ? coords.lat : undefined,
+              longitude: coords ? coords.lon : undefined,
+              radiusKm: 15,
+              perPage: maxCandidates,
+              useDemoData,
+            });
 
-          for (const item of geographResults) {
-            const key = `geograph_${item.externalAssetId}`;
-            if (!seenExternalIds.has(key)) {
-              seenExternalIds.add(key);
-              candidates.push(this.mapSearchItemToCandidate(item, scene, query));
+            for (let i = 0; i < geographResults.length; i++) {
+              const item = geographResults[i];
+              const key = `geograph_${item.externalAssetId}`;
+              if (!seenExternalIds.has(key)) {
+                seenExternalIds.add(key);
+                candidates.push(this.mapSearchItemToCandidate(item, scene, query, candidates.length));
+              }
+              if (candidates.length >= maxCandidates) break;
             }
+          } catch (err: any) {
+            console.warn(`Geograph error for query "${query}":`, err.message);
           }
-        } catch (err: any) {
-          console.warn(`Geograph error for query "${query}":`, err.message);
+
+          if (candidates.length >= maxCandidates) {
+            break;
+          }
         }
       }
+    } else {
+      // 2. GERİ KALAN NESNE VEYA DİĞER STOK GÖRSELLERİ: Openverse (veya Pexels anahtarı varsa Pexels)
+      const stockAdapter = (pexelsAdapter?.hasApiKey() ? pexelsAdapter : sourceRegistry.get('openverse')) || pexelsAdapter;
+      if (stockAdapter) {
+        for (const query of queries.slice(0, 2)) {
+          try {
+            const stockResults = await stockAdapter.search({
+              queryText: query,
+              locationName: '',
+              perPage: maxCandidates,
+              useDemoData,
+            });
 
-      // If we already collected sufficient candidates (>= 6), avoid excessive network hits
-      if (candidates.length >= 8) {
-        break;
+            for (let i = 0; i < stockResults.length; i++) {
+              const item = stockResults[i];
+              const key = `${item.providerId}_${item.externalAssetId}`;
+              if (!seenExternalIds.has(key)) {
+                seenExternalIds.add(key);
+                candidates.push(this.mapSearchItemToCandidate(item, scene, query, candidates.length));
+              }
+              if (candidates.length >= maxCandidates) break;
+            }
+          } catch (err: any) {
+            console.warn(`Stock search error for query "${query}":`, err.message);
+          }
+
+          if (candidates.length >= maxCandidates) {
+            break;
+          }
+        }
       }
     }
 
@@ -218,14 +356,15 @@ export class BatchSearchCoordinator {
       candidates.push(card);
     }
 
-    // Rank and designate recommended result
-    return this.rankCandidates(candidates, scene);
+    // Rank and designate unique recommended result (strictly cap at 10 items)
+    return this.rankCandidates(candidates, scene, usedAssetKeys).slice(0, 10);
   }
 
   private static mapSearchItemToCandidate(
     item: any,
     scene: ScriptScene,
-    queryUsed: string
+    queryUsed: string,
+    rankIndex: number = 0
   ): SceneCandidateResult {
     let matchType: CandidateMatchType = 'generic_visual';
 
@@ -240,8 +379,8 @@ export class BatchSearchCoordinator {
       matchType = 'historic_reconstruction';
     }
 
-    // Calculate score
-    let score = 0.5;
+    // Calculate score (earlier search results receive higher base priority)
+    let score = 0.5 - (rankIndex * 0.01);
     if (matchType === 'exact_location') score += 0.4;
     if (matchType === 'nearby_reference') score += 0.25;
 
@@ -269,6 +408,8 @@ export class BatchSearchCoordinator {
       licenceUrl: item.licenceUrl,
       commercialUseStatus: item.commercialUseStatus,
       mediaType: item.mediaType as MediaType,
+      width: item.width,
+      height: item.height,
       relevanceScore: Math.min(1.0, score),
       matchType,
       isRecommended: false,
@@ -281,9 +422,19 @@ export class BatchSearchCoordinator {
 
   private static rankCandidates(
     candidates: SceneCandidateResult[],
-    scene: ScriptScene
+    scene: ScriptScene,
+    usedAssetKeys?: Set<string>
   ): SceneCandidateResult[] {
+    const getAssetKey = (c: SceneCandidateResult) => `${c.providerId}_${c.externalAssetId}`;
+
     const sorted = [...candidates].sort((a, b) => {
+      // Prioritize candidates that have not been recommended or selected in previous scenes
+      if (usedAssetKeys) {
+        const aUsed = usedAssetKeys.has(getAssetKey(a)) ? 1 : 0;
+        const bUsed = usedAssetKeys.has(getAssetKey(b)) ? 1 : 0;
+        if (aUsed !== bUsed) return aUsed - bUsed; // Unused (0) comes first
+      }
+
       // Prioritize media type match
       const aTypeMatch = (scene.targetMediaType === 'video' && a.mediaType === 'video') ? 1 : 0;
       const bTypeMatch = (scene.targetMediaType === 'video' && b.mediaType === 'video') ? 1 : 0;
@@ -292,9 +443,18 @@ export class BatchSearchCoordinator {
       return b.relevanceScore - a.relevanceScore;
     });
 
-    // Mark top candidate as recommended
+    // Reset all isRecommended to false
+    for (const c of sorted) {
+      c.isRecommended = false;
+    }
+
+    // Designate the top candidate as recommended and register in usedAssetKeys
     if (sorted.length > 0) {
-      sorted[0].isRecommended = true;
+      const top = sorted[0];
+      top.isRecommended = true;
+      if (usedAssetKeys) {
+        usedAssetKeys.add(getAssetKey(top));
+      }
     }
 
     return sorted;

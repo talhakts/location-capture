@@ -28,6 +28,37 @@ export function ConfigModal({
   useDemoData,
   onToggleDemoData,
 }: ConfigModalProps) {
+  const [inputPexelsKey, setInputPexelsKey] = React.useState('');
+  const [isSaving, setIsSaving] = React.useState(false);
+  const [saveMessage, setSaveMessage] = React.useState<string | null>(null);
+
+  const handleSavePexelsKey = async () => {
+    if (!inputPexelsKey.trim()) return;
+    setIsSaving(true);
+    setSaveMessage(null);
+    try {
+      const res = await fetch('/api/system/config', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ pexelsKey: inputPexelsKey.trim() }),
+      });
+      const data = await res.json();
+      if (data.success) {
+        setSaveMessage('Pexels API anahtarı başarıyla kaydedildi!');
+        setInputPexelsKey('');
+        setTimeout(() => {
+          window.location.reload();
+        }, 1200);
+      } else {
+        setSaveMessage(`Hata: ${data.error}`);
+      }
+    } catch (err: any) {
+      setSaveMessage(`Bağlantı hatası: ${err.message}`);
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
   if (!isOpen) return null;
 
   return (
@@ -95,9 +126,29 @@ export function ConfigModal({
               </h4>
               <p className="mt-1 leading-relaxed">
                 {hasPexelsKey
-                  ? 'PEXELS_API_KEY sunucu tarafında algılandı. Sahneler için yüksek çözünürlüklü stok fotoğraf ve video aramaları canlı çalışır.'
-                  : 'Batch Studio içinde canlı stok fotoğraf ve HD video aramak için pexels.com/api üzerinden ücretsiz API anahtarı alıp .env.local dosyasına ekleyebilirsiniz.'}
+                  ? 'PEXELS_API_KEY sunucu tarafında algılandı. Nesne ve genel stok sahneleri için Pexels arşivi canlı çalışır.'
+                  : 'Mekan/sokak dışındaki nesne ve stok sahnelerini aramak için ücretsiz Pexels API anahtarınızı aşağıya girebilirsiniz.'}
               </p>
+
+              <div className="mt-3 flex items-center space-x-2">
+                <input
+                  type="text"
+                  placeholder="Pexels API Anahtarını Yapıştırın"
+                  value={inputPexelsKey}
+                  onChange={(e) => setInputPexelsKey(e.target.value)}
+                  className="flex-1 bg-white border border-[#CBD5E1] rounded px-3 py-1.5 text-xs text-[#1B2A41] font-mono focus:outline-none focus:ring-1 focus:ring-[#FD9E76]"
+                />
+                <button
+                  onClick={handleSavePexelsKey}
+                  disabled={isSaving || !inputPexelsKey.trim()}
+                  className="px-3 py-1.5 bg-[#FD9E76] text-[#1B2A41] text-xs font-bold rounded hover:bg-[#fa8756] disabled:opacity-50 transition-colors"
+                >
+                  {isSaving ? 'Kaydediliyor...' : 'Kaydet'}
+                </button>
+              </div>
+              {saveMessage && (
+                <p className="mt-1 text-[11px] font-semibold text-emerald-700">{saveMessage}</p>
+              )}
             </div>
           </div>
 

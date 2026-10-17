@@ -868,3 +868,78 @@ export function updateSceneDownloadStatus(
   `).run(status, filename || null, filePath || null, error || null, new Date().toISOString(), sceneId);
 }
 
+export function isAiScene(scene: ScriptScene): boolean {
+  if (scene.sceneType === 'ai_prompt') return true;
+  if (!scene.aiPrompt) return false;
+  const p = scene.aiPrompt.trim().toLowerCase();
+  return !['none', 'n/a', 'yok', 'no', 'null', 'undefined', '-', ''].includes(p);
+}
+
+export function deduplicateSceneRecommendations(projectId: string): void {
+  const db = getDatabase();
+  const scenes = listScriptScenesByProject(projectId);
+  const candidates = listSceneCandidatesByProject(projectId);
+  if (scenes.length === 0) return;
+
+  const usedAssetKeys = new Set<string>();
+  const candidatesByScene = new Map<string, SceneCandidateResult[]>();
+  for (const c of candidates) {
+    if (!candidatesByScene.has(c.sceneId)) {
+      candidatesByScene.set(c.sceneId, []);
+    }
+    candidatesByScene.get(c.sceneId)!.push(c);
+  }
+
+  const getAssetKey = (c: SceneCandidateResult) => `${c.providerId}_${c.externalAssetId}`;
+
+  for (const scene of scenes) {
+    // If scene is an AI prompt scene, it should be excluded from stock selection
+    if (isAiScene(scene)) {
+      if (scene.selectedCandidateId) {
+        selectSceneCandidate(scene.id, null);
+        scene.selectedCandidateId = undefined;
+      }
+      db.prepare("UPDATE script_scenes SET sceneType = 'ai_prompt' WHERE id = ?").run(scene.id);
+      db.prepare("UPDATE scene_candidates SET isRecommended = 0 WHERE sceneId = ?").run(scene.id);
+      continue;
+    }
+
+    const sceneCandidates = candidatesByScene.get(scene.id) || [];
+    if (sceneCandidates.length === 0) continue;
+
+    let chosenCandidate = scene.selectedCandidateId
+      ? sceneCandidates.find((c) => c.id === scene.selectedCandidateId)
+      : undefined;
+
+    // If currently chosen is already used by an earlier scene, find an unused candidate for this scene
+    if (!chosenCandidate || usedAssetKeys.has(getAssetKey(chosenCandidate))) {
+      const unusedCandidate = sceneCandidates.find((c) => !usedAssetKeys.has(getAssetKey(c)));
+      if (unusedCandidate) {
+        chosenCandidate = unusedCandidate;
+      } else {
+        chosenCandidate = chosenCandidate || sceneCandidates[0];
+      }
+    }
+
+    if (chosenCandidate) {
+      usedAssetKeys.add(getAssetKey(chosenCandidate));
+
+      // Update scene selected candidate if changed or missing
+      if (scene.selectedCandidateId !== chosenCandidate.id) {
+        selectSceneCandidate(scene.id, chosenCandidate);
+        scene.selectedCandidateId = chosenCandidate.id;
+      }
+
+      // Update isRecommended flag in database: 1 for chosen, 0 for other candidates of this scene
+      for (const c of sceneCandidates) {
+        const isRec = c.id === chosenCandidate.id ? 1 : 0;
+        if ((c.isRecommended ? 1 : 0) !== isRec) {
+          db.prepare('UPDATE scene_candidates SET isRecommended = ? WHERE id = ?').run(isRec, c.id);
+          c.isRecommended = Boolean(isRec);
+        }
+      }
+    }
+  }
+}
+
+

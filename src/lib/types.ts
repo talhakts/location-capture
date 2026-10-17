@@ -203,7 +203,7 @@ export interface SceneCandidateResult {
   id: string;
   sceneId: string;
   projectId: string;
-  providerId: 'geograph' | 'pexels' | 'custom_graphic' | 'stock_video';
+  providerId: 'geograph' | 'pexels' | 'custom_graphic' | 'stock_video' | 'openverse';
   externalAssetId: string;
   queryUsed: string;
   title: string;

@@ -23,7 +23,10 @@ import {
   listSceneCandidates,
   selectSceneCandidate,
   updateSceneDownloadStatus,
-  getScriptScene
+  getScriptScene,
+  deduplicateSceneRecommendations,
+  listScriptScenesByProject,
+  listSceneCandidatesByProject
 } from '../src/lib/database/db';
 import { Project, ScriptScene, SceneCandidateResult } from '../src/lib/types';
 
@@ -390,3 +393,168 @@ test('7. Output Metadata Generation (CSV, Markdown Shot List, Attribution & Mani
   assert.equal(parsed.project.title, 'Durham Coastal Episode');
   assert.equal(parsed.scenes[0].downloadedFilename, '01_terraced-houses.jpg');
 });
+
+test('8. Candidate Deduplication: Ensures unique recommended candidate per scene', () => {
+  const projectId = `proj_dedup_${Date.now()}`;
+  createProject({
+    id: projectId,
+    title: 'Dedup Test Project',
+    workingVideoTitle: 'Dedup Test',
+  });
+
+  const planId = `plan_dedup_${Date.now()}`;
+  createOrUpdateVisualPlan({
+    id: planId,
+    projectId,
+    title: 'Dedup Plan',
+    rawInput: 'raw',
+    sceneCount: 3,
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString(),
+  });
+
+  const scene1: ScriptScene = {
+    id: `sc_dedup_1_${Date.now()}`,
+    projectId,
+    visualPlanId: planId,
+    sceneNumber: 1,
+    timecode: '0:00',
+    triggerPhrase: 'Scene 1',
+    searchQueries: ['query 1'],
+    targetMediaType: 'photo',
+    targetDurationSeconds: 6,
+    sceneType: 'stock',
+    searchStatus: 'completed',
+    downloadStatus: 'none',
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString(),
+  };
+
+  const scene2: ScriptScene = {
+    id: `sc_dedup_2_${Date.now()}`,
+    projectId,
+    visualPlanId: planId,
+    sceneNumber: 2,
+    timecode: '0:06',
+    triggerPhrase: 'Scene 2',
+    searchQueries: ['query 2'],
+    targetMediaType: 'photo',
+    targetDurationSeconds: 6,
+    sceneType: 'stock',
+    searchStatus: 'completed',
+    downloadStatus: 'none',
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString(),
+  };
+
+  saveScriptScenes([scene1, scene2]);
+
+  // Both scenes have candidates sharing candidate A as first option
+  const candA_scene1: SceneCandidateResult = {
+    id: `cand_s1_A`,
+    sceneId: scene1.id,
+    projectId,
+    providerId: 'geograph',
+    externalAssetId: 'shared_asset_100',
+    queryUsed: 'query 1',
+    title: 'Shared Asset',
+    originalUrl: 'https://example.com/shared',
+    previewUrl: 'https://example.com/shared_prev.jpg',
+    downloadUrl: 'https://example.com/shared.jpg',
+    creator: 'Photographer',
+    licenceName: 'CC BY-SA',
+    commercialUseStatus: 'verified_commercial',
+    mediaType: 'photograph',
+    relevanceScore: 0.9,
+    matchType: 'generic_visual',
+    isRecommended: true,
+    discoveredAt: new Date().toISOString(),
+  };
+
+  const candB_scene1: SceneCandidateResult = {
+    id: `cand_s1_B`,
+    sceneId: scene1.id,
+    projectId,
+    providerId: 'geograph',
+    externalAssetId: 'unique_asset_200',
+    queryUsed: 'query 1',
+    title: 'Unique to S1',
+    originalUrl: 'https://example.com/s1',
+    previewUrl: 'https://example.com/s1_prev.jpg',
+    downloadUrl: 'https://example.com/s1.jpg',
+    creator: 'Photographer',
+    licenceName: 'CC BY-SA',
+    commercialUseStatus: 'verified_commercial',
+    mediaType: 'photograph',
+    relevanceScore: 0.8,
+    matchType: 'generic_visual',
+    isRecommended: false,
+    discoveredAt: new Date().toISOString(),
+  };
+
+  // Scene 2 also has shared_asset_100 and a second candidate candB_scene2
+  const candA_scene2: SceneCandidateResult = {
+    id: `cand_s2_A`,
+    sceneId: scene2.id,
+    projectId,
+    providerId: 'geograph',
+    externalAssetId: 'shared_asset_100', // DUPLICATE ASSET
+    queryUsed: 'query 2',
+    title: 'Shared Asset Duplicate',
+    originalUrl: 'https://example.com/shared',
+    previewUrl: 'https://example.com/shared_prev.jpg',
+    downloadUrl: 'https://example.com/shared.jpg',
+    creator: 'Photographer',
+    licenceName: 'CC BY-SA',
+    commercialUseStatus: 'verified_commercial',
+    mediaType: 'photograph',
+    relevanceScore: 0.9,
+    matchType: 'generic_visual',
+    isRecommended: true, // Both initially marked recommended
+    discoveredAt: new Date().toISOString(),
+  };
+
+  const candB_scene2: SceneCandidateResult = {
+    id: `cand_s2_B`,
+    sceneId: scene2.id,
+    projectId,
+    providerId: 'geograph',
+    externalAssetId: 'unique_asset_300',
+    queryUsed: 'query 2',
+    title: 'Unique to S2',
+    originalUrl: 'https://example.com/s2',
+    previewUrl: 'https://example.com/s2_prev.jpg',
+    downloadUrl: 'https://example.com/s2.jpg',
+    creator: 'Photographer',
+    licenceName: 'CC BY-SA',
+    commercialUseStatus: 'verified_commercial',
+    mediaType: 'photograph',
+    relevanceScore: 0.75,
+    matchType: 'generic_visual',
+    isRecommended: false,
+    discoveredAt: new Date().toISOString(),
+  };
+
+  saveSceneCandidates([candA_scene1, candB_scene1, candA_scene2, candB_scene2]);
+
+  // Execute deduplication
+  deduplicateSceneRecommendations(projectId);
+
+  const updatedScenes = listScriptScenesByProject(projectId);
+  const updatedCandidates = listSceneCandidatesByProject(projectId);
+
+  const s1 = updatedScenes.find((s) => s.id === scene1.id)!;
+  const s2 = updatedScenes.find((s) => s.id === scene2.id)!;
+
+  // Scene 1 keeps candA_scene1
+  assert.equal(s1.selectedCandidateId, 'cand_s1_A');
+
+  // Scene 2 must NOT have candA_scene2; it must have selected unique candB_scene2!
+  assert.equal(s2.selectedCandidateId, 'cand_s2_B');
+
+  // Check that recommended flags reflect this
+  const s2Candidates = updatedCandidates.filter((c) => c.sceneId === scene2.id);
+  const s2Rec = s2Candidates.find((c) => c.isRecommended);
+  assert.equal(s2Rec?.id, 'cand_s2_B');
+});
+

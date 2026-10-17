@@ -27,11 +27,14 @@ export class GoogleEarthStudioAdapter implements SourceAdapter {
   }
 
   public async search(params: ProviderSearchParams): Promise<SearchResultItem[]> {
+    const lat = params.latitude ?? 54.0;
+    const lon = params.longitude ?? -2.0;
+
     return [
       {
-        id: `gearth_${params.latitude.toFixed(4)}_${params.longitude.toFixed(4)}`,
+        id: `gearth_${lat.toFixed(4)}_${lon.toFixed(4)}`,
         providerId: 'google_earth',
-        externalAssetId: `earth_${params.latitude},${params.longitude}`,
+        externalAssetId: `earth_${lat},${lon}`,
         title: `Aerial Route Planning: ${params.locationName}`,
         description:
           'Plan aerial approaches, reveals, and camera fly-through coordinates. Use this plan to inform licensed drone capture or stock acquisitions.',
@@ -43,8 +46,8 @@ export class GoogleEarthStudioAdapter implements SourceAdapter {
         commercialUseStatus: 'not_approved',
         adaptationRestrictions:
           'NOT APPROVED FOR COMMERCIAL MONETIZED YOUTUBE USE without explicit authorization. Do not represent render previews as final production assets.',
-        latitude: params.latitude,
-        longitude: params.longitude,
+        latitude: lat,
+        longitude: lon,
         distanceMeters: 0,
         mediaType: 'shot_plan',
         isDemoData: false,

@@ -5,7 +5,8 @@ import {
   createOrUpdateVisualPlan,
   listScriptScenesByPlan,
   saveScriptScenes,
-  listSceneCandidatesByProject
+  listSceneCandidatesByProject,
+  deduplicateSceneRecommendations
 } from '@/lib/database/db';
 import { VisualPlanParser } from '@/lib/script-parser/parser';
 import { VisualPlan } from '@/lib/types';
@@ -32,6 +33,13 @@ export async function GET(
         scenes: [],
         candidates: [],
       });
+    }
+
+    // Automatically deduplicate recommended and selected candidates across scenes
+    try {
+      deduplicateSceneRecommendations(projectId);
+    } catch {
+      // Non-blocking
     }
 
     const scenes = listScriptScenesByPlan(plan.id);

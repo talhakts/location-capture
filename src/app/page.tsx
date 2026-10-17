@@ -7,8 +7,6 @@ import { Header } from '@/components/Header';
 import { DashboardStats } from '@/components/DashboardStats';
 import { LocationSearch } from '@/components/LocationSearch';
 import { Gallery } from '@/components/Gallery';
-import { ProjectWorkspace } from '@/components/ProjectWorkspace';
-import { ShotPlanner } from '@/components/ShotPlanner';
 import { MediaImporter } from '@/components/MediaImporter';
 import { NewProjectModal } from '@/components/NewProjectModal';
 import { ExportModal } from '@/components/ExportModal';
@@ -17,8 +15,8 @@ import { ScriptToVisualsStudio } from '@/components/ScriptToVisualsStudio';
 import { fetchGeographClientJsonp } from '@/lib/location/geograph-client';
 
 export default function Home() {
-  // Navigation & Modal states
-  const [activeTab, setActiveTab] = useState<'search' | 'batch' | 'project' | 'shots' | 'media'>('search');
+  // Navigation & Modal states - Default to Batch Studio ('batch')
+  const [activeTab, setActiveTab] = useState<'batch' | 'search' | 'media'>('batch');
   const [isNewProjectModalOpen, setIsNewProjectModalOpen] = useState(false);
   const [isConfigModalOpen, setIsConfigModalOpen] = useState(false);
   const [isExportModalOpen, setIsExportModalOpen] = useState(false);
@@ -370,20 +368,6 @@ export default function Home() {
     }
   };
 
-  // Create Shot from Reference quick action
-  const handleCreateShotFromRef = (ref: SourceReference) => {
-    setActiveTab('shots');
-    handleAddShot({
-      projectId: activeProject?.id || '',
-      durationSeconds: 8,
-      shotType: ref.mediaType === 'photograph' ? 'Street-level establishing shot' : 'Wide establishing shot',
-      visualObjective: `Visual reference of ${ref.title}`,
-      movement: 'Slow push-in',
-      scriptExcerpt: activeProject?.scriptExcerpt,
-      relatedReferenceId: ref.id,
-      productionNotes: 'Ken Burns digital zoom 105% on still photograph; CC BY-SA attribution required.',
-    });
-  };
 
   // Select Candidate Location
   const handleSelectCandidate = (candidate: ResolvedLocationCandidate) => {
@@ -486,37 +470,6 @@ export default function Home() {
             project={activeProject}
             hasGeographKey={hasGeographKey}
             hasPexelsKey={hasPexelsKey}
-          />
-        )}
-
-        {/* Tab 3: Project Collection Workspace */}
-        {activeTab === 'project' && activeProject && (
-          <ProjectWorkspace
-            project={activeProject}
-            references={projectReferences}
-            onUpdateProject={async (updates) => {
-              await fetch(`/api/projects/${activeProject.id}`, {
-                method: 'PATCH',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(updates),
-              });
-              loadProjects();
-            }}
-            onUpdateReferenceStatus={handleUpdateReferenceStatus}
-            onDeleteReference={handleDeleteReference}
-            onCreateShotFromReference={handleCreateShotFromRef}
-          />
-        )}
-
-        {/* Tab 3: Shot Planner Sequence */}
-        {activeTab === 'shots' && (
-          <ShotPlanner
-            shots={projectShots}
-            references={projectReferences}
-            onAddShot={handleAddShot}
-            onReorderShots={handleReorderShots}
-            onDeleteShot={handleDeleteShot}
-            activeScriptExcerpt={activeProject?.scriptExcerpt}
           />
         )}
 

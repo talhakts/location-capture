@@ -23,10 +23,10 @@ interface HeaderProps {
   hasGeographKey: boolean;
   useDemoData: boolean;
   onToggleDemoData: () => void;
-  activeTab: 'search' | 'batch' | 'project' | 'shots' | 'media';
-  onChangeTab: (tab: 'search' | 'batch' | 'project' | 'shots' | 'media') => void;
-  savedCount: number;
-  shotCount: number;
+  activeTab: 'batch' | 'search' | 'media';
+  onChangeTab: (tab: 'batch' | 'search' | 'media') => void;
+  savedCount?: number;
+  shotCount?: number;
 }
 
 export function Header({
@@ -143,16 +143,6 @@ export function Header({
         {/* Ana Navigasyon Sekmeleri */}
         <div className="flex space-x-1 border-t border-[#243856] pt-1 overflow-x-auto">
           <button
-            onClick={() => onChangeTab('search')}
-            className={`px-4 py-2 text-xs font-semibold uppercase tracking-wider transition-colors border-b-2 whitespace-nowrap ${
-              activeTab === 'search'
-                ? 'border-[#FD9E76] text-[#FD9E76] bg-[#243856]/40'
-                : 'border-transparent text-[#E2DBD0]/70 hover:text-white'
-            }`}
-          >
-            Konum Arama &amp; Keşif
-          </button>
-          <button
             onClick={() => onChangeTab('batch')}
             className={`px-4 py-2 text-xs font-semibold uppercase tracking-wider transition-colors border-b-2 flex items-center space-x-1.5 whitespace-nowrap ${
               activeTab === 'batch'
@@ -161,37 +151,17 @@ export function Header({
             }`}
           >
             <Sparkles className="w-3.5 h-3.5 text-[#FD9E76]" />
-            <span>Senaryo → Görseller</span>
+            <span>Senaryo → Görseller (Batch Studio)</span>
           </button>
           <button
-            onClick={() => onChangeTab('project')}
-            className={`px-4 py-2 text-xs font-semibold uppercase tracking-wider transition-colors border-b-2 flex items-center space-x-1.5 whitespace-nowrap ${
-              activeTab === 'project'
+            onClick={() => onChangeTab('search')}
+            className={`px-4 py-2 text-xs font-semibold uppercase tracking-wider transition-colors border-b-2 whitespace-nowrap ${
+              activeTab === 'search'
                 ? 'border-[#FD9E76] text-[#FD9E76] bg-[#243856]/40'
                 : 'border-transparent text-[#E2DBD0]/70 hover:text-white'
             }`}
           >
-            <span>Proje Referansları</span>
-            {savedCount > 0 && (
-              <span className="px-1.5 py-0.2 rounded-full text-[10px] bg-[#FD9E76] text-[#1B2A41] font-bold">
-                {savedCount}
-              </span>
-            )}
-          </button>
-          <button
-            onClick={() => onChangeTab('shots')}
-            className={`px-4 py-2 text-xs font-semibold uppercase tracking-wider transition-colors border-b-2 flex items-center space-x-1.5 whitespace-nowrap ${
-              activeTab === 'shots'
-                ? 'border-[#FD9E76] text-[#FD9E76] bg-[#243856]/40'
-                : 'border-transparent text-[#E2DBD0]/70 hover:text-white'
-            }`}
-          >
-            <span>Çekim / Plan Planlayıcı</span>
-            {shotCount > 0 && (
-              <span className="px-1.5 py-0.2 rounded-full text-[10px] bg-[#FD9E76] text-[#1B2A41] font-bold">
-                {shotCount}
-              </span>
-            )}
+            Konum Arama &amp; Keşif
           </button>
           <button
             onClick={() => onChangeTab('media')}

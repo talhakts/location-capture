@@ -166,7 +166,12 @@ export class VisualPlanParser {
         } else if (/^notes:\s*/i.test(line)) {
           visualNotes = line.replace(/^notes:\s*/i, '').trim();
         } else if (/^(?:ai prompt|image prompt|prompt):\s*/i.test(line)) {
-          aiPrompt = line.replace(/^(?:ai prompt|image prompt|prompt):\s*/i, '').trim();
+          const rawPrompt = line.replace(/^(?:ai prompt|image prompt|prompt):\s*/i, '').trim();
+          if (rawPrompt && !['none', 'n/a', 'yok', 'no', 'null', 'undefined', '-'].includes(rawPrompt.toLowerCase())) {
+            aiPrompt = rawPrompt;
+          } else {
+            aiPrompt = undefined;
+          }
         } else if (/^motion:\s*/i.test(line)) {
           motionPrompt = line.replace(/^motion:\s*/i, '').trim();
         } else {
@@ -200,10 +205,11 @@ export class VisualPlanParser {
       if (isExplicitGraphic) {
         sceneType = 'custom_graphic';
         targetMediaType = 'graphic';
-      } else if (aiPrompt && queries.length === 0) {
+      } else if (aiPrompt) {
+        // Dedicated AI scene: should be generated via AI, skipped from stock search & download
         sceneType = 'ai_prompt';
-      } else if (aiPrompt && queries.length > 0) {
-        sceneType = 'mixed';
+      } else {
+        sceneType = 'stock';
       }
 
       // Check if video is preferred
