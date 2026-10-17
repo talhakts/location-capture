@@ -132,34 +132,52 @@ export class ProjectAssetDownloader {
         let downloadedOk = false;
         let lastError = '';
 
+        const WIKIMEDIA_USER_AGENT =
+          'LocationCapture-DocumentaryTool/1.0 (https://britainoffmap.example; contact@britainoffmap.example) NodeJS';
+
         for (const targetUrl of [...new Set(urlsToAttempt)]) {
-          try {
-            const controller = new AbortController();
-            const timeout = setTimeout(() => controller.abort(), 45000); // 45s timeout for high-res
+          let attempts = 0;
+          const maxAttempts = 3;
 
-            const res = await fetch(targetUrl, {
-              signal: controller.signal,
-              headers: {
-                'User-Agent':
-                  'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36 LocationCapture/1.0',
-                Accept: 'image/avif,image/webp,image/apng,image/svg+xml,image/*,video/*,*/*;q=0.8',
-              },
-            });
-            clearTimeout(timeout);
+          while (attempts < maxAttempts) {
+            attempts++;
+            try {
+              const controller = new AbortController();
+              const timeout = setTimeout(() => controller.abort(), 45000); // 45s timeout for high-res
 
-            if (res.ok) {
-              const arrayBuf = await res.arrayBuffer();
-              if (arrayBuf.byteLength > 2000) {
-                fileBuffer = Buffer.from(arrayBuf);
-                downloadedOk = true;
+              const res = await fetch(targetUrl, {
+                signal: controller.signal,
+                headers: {
+                  'User-Agent': WIKIMEDIA_USER_AGENT,
+                  Accept: 'image/avif,image/webp,image/apng,image/svg+xml,image/*,video/*,*/*;q=0.8',
+                },
+              });
+              clearTimeout(timeout);
+
+              if (res.ok) {
+                const arrayBuf = await res.arrayBuffer();
+                if (arrayBuf.byteLength > 2000) {
+                  fileBuffer = Buffer.from(arrayBuf);
+                  downloadedOk = true;
+                  break;
+                }
+              } else if (res.status === 429) {
+                lastError = `HTTP 429 Too Many Requests`;
+                // Rate limited by Wikimedia / CDN, wait with backoff
+                await new Promise((r) => setTimeout(r, 1200 * attempts));
+                continue;
+              } else {
+                lastError = `HTTP ${res.status}: ${res.statusText}`;
                 break;
               }
-            } else {
-              lastError = `HTTP ${res.status}: ${res.statusText}`;
+            } catch (fetchErr: any) {
+              lastError = fetchErr.message;
+              if (attempts < maxAttempts) {
+                await new Promise((r) => setTimeout(r, 800));
+              }
             }
-          } catch (fetchErr: any) {
-            lastError = fetchErr.message;
           }
+          if (downloadedOk) break;
         }
 
         if (!downloadedOk || !fileBuffer!) {
@@ -194,29 +212,44 @@ export class ProjectAssetDownloader {
         try {
           const meta = await sharp(fileBuffer).metadata();
           if (meta.width && meta.height) {
-            // If the image is smaller than 1920x1080 in either dimension, upscale it to 1920x1080 Full HD
-            if (meta.width < 1920 || meta.height < 1080) {
-              if (filename.endsWith('.png')) {
-                fileBuffer = await sharp(fileBuffer)
-                  .resize(1920, 1080, {
-                    fit: 'cover',
-                    position: 'center',
-                    kernel: sharp.kernel.lanczos3,
-                  })
-                  .png({ compressionLevel: 8 })
-                  .toBuffer();
-              } else {
-                fileBuffer = await sharp(fileBuffer)
-                  .resize(1920, 1080, {
-                    fit: 'cover',
-                    position: 'center',
-                    kernel: sharp.kernel.lanczos3,
-                  })
-                  .jpeg({ quality: 95, mozjpeg: true })
-                  .toBuffer();
-              }
+            const aspect = meta.width / meta.height;
+            const isLandscape = aspect >= 1.15 && aspect <= 2.2;
+
+            if (isLandscape) {
+              // Standard documentary 16:9 1080p framing with smart entropy positioning
+              fileBuffer = await sharp(fileBuffer)
+                .resize(1920, 1080, {
+                  fit: 'cover',
+                  position: 'entropy',
+                  kernel: sharp.kernel.lanczos3,
+                })
+                .jpeg({ quality: 95, mozjpeg: true })
+                .toBuffer();
+            } else {
+              // Non-standard, portrait (vertical), or ultra-wide panorama:
+              // Slicing 60% of a vertical photo ruins the subject!
+              // Instead, create a broadcast-style 1920x1080 canvas:
+              // 1) 1920x1080 background with heavy gaussian blur (25px) + subtle vignette
+              // 2) The full uncropped photo sharp in the center (fit: contain)
+              const bg = await sharp(fileBuffer)
+                .resize(1920, 1080, { fit: 'cover' })
+                .blur(25)
+                .modulate({ brightness: 0.75 })
+                .toBuffer();
+
+              const fg = await sharp(fileBuffer)
+                .resize(1920, 1080, {
+                  fit: 'contain',
+                  background: { r: 0, g: 0, b: 0, alpha: 0 },
+                })
+                .png()
+                .toBuffer();
+
+              fileBuffer = await sharp(bg)
+                .composite([{ input: fg, gravity: 'center' }])
+                .jpeg({ quality: 95, mozjpeg: true })
+                .toBuffer();
             }
-            // If already >= 1920x1080, keep the crisp high-resolution / closest upper version intact
           }
         } catch (imgErr: any) {
           console.warn('Image post-processing notice:', imgErr.message);

@@ -440,6 +440,22 @@ export class BatchSearchCoordinator {
       const bTypeMatch = (scene.targetMediaType === 'video' && b.mediaType === 'video') ? 1 : 0;
       if (aTypeMatch !== bTypeMatch) return bTypeMatch - aTypeMatch;
 
+      // Prioritize landscape aspect ratio suitable for 16:9 documentary production (1.2 to 2.1)
+      if (a.width && a.height && b.width && b.height) {
+        const aRatio = a.width / a.height;
+        const bRatio = b.width / b.height;
+        const aLandscape = (aRatio >= 1.2 && aRatio <= 2.1) ? 1 : 0;
+        const bLandscape = (bRatio >= 1.2 && bRatio <= 2.1) ? 1 : 0;
+        if (aLandscape !== bLandscape) return bLandscape - aLandscape;
+      }
+
+      // Prioritize high-resolution assets (>= 1200px) over lower resolution
+      if (a.width && b.width) {
+        const aHighRes = a.width >= 1200 ? 1 : 0;
+        const bHighRes = b.width >= 1200 ? 1 : 0;
+        if (aHighRes !== bHighRes) return bHighRes - aHighRes;
+      }
+
       return b.relevanceScore - a.relevanceScore;
     });
 

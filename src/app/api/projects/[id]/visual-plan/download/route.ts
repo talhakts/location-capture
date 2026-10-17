@@ -97,6 +97,9 @@ export async function POST(
         webPath: res.webPath,
         error: res.error,
       });
+
+      // Polite throttle between rapid automated downloads to respect CDN limits
+      await new Promise((r) => setTimeout(r, 250));
     }
 
     // Refresh metadata files after downloads

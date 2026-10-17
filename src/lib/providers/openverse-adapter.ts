@@ -62,6 +62,11 @@ export class OpenverseAdapter implements SourceAdapter {
         const data = await res.json();
         if (data.results && Array.isArray(data.results)) {
           for (const item of data.results as OpenverseImageItem[]) {
+            if (item.width && item.height) {
+              if (item.width < 600 || item.height < 360) continue;
+              const ratio = item.width / item.height;
+              if (ratio > 2.8 || ratio < 0.45) continue;
+            }
             items.push(this.mapItemToResult(item, query));
             if (items.length >= perPage) break;
           }
@@ -148,6 +153,12 @@ export class OpenverseAdapter implements SourceAdapter {
 
       const cleanUrl = info.url.split('?')[0];
       if (!cleanUrl.match(/\.(jpe?g|png|webp)$/i)) continue;
+
+      if (info.width && info.height) {
+        if (info.width < 600 || info.height < 360) continue;
+        const ratio = info.width / info.height;
+        if (ratio > 2.8 || ratio < 0.45) continue;
+      }
 
       let cleanTitle = p.title
         .replace(/^File:/i, '')

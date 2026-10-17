@@ -848,6 +848,13 @@ export class GeographAdapter implements SourceAdapter {
           const cleanUrl = info.url.split('?')[0];
           if (!cleanUrl.match(/\.(jpe?g|png|webp)$/i)) continue;
 
+          // Filter out tiny thumbnails and extreme aspect ratio slices
+          if (info.width && info.height) {
+            if (info.width < 600 || info.height < 360) continue;
+            const ratio = info.width / info.height;
+            if (ratio > 2.8 || ratio < 0.45) continue;
+          }
+
           // Extract photo ID if geograph
           const idMatch = p.title.match(/(?:geograph\.org\.uk\s*-\s*|geograph\s+)(\d+)/i);
           const photoId = idMatch ? idMatch[1] : String(p.pageid);
